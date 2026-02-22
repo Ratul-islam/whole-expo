@@ -14,12 +14,13 @@ export const ENDPOINTS = {
   },
   PATH:{
     NEW: "/path",
+    UPDATE: "/path",
     DELETE: "/path",
     ALLPATH: "/path",
-    SAVEPATH: "/path/saved-paths",
-    DELETESAVEPATH: "/path/saved-paths",
-    GETSAVEPATH: "/path/saved-paths",
-    CHEKSAVEPATH: "/path/saved-paths/:pathId/check",
+    SAVEPATH: "/path/saved",
+    DELETESAVEPATH: "/path/saved",
+    GETSAVEPATH: "/path/saved",
+    CHEKSAVEPATH: "/path/saved/:pathId/check",
   },
   SESSION:{
     START: "/sessions/start",

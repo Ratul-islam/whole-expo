@@ -24,14 +24,14 @@ export default function RegisterScreen() {
     setErr(null);
     setLoading(true);
     try {
-      const res = await authService.register({ firstName:first, lastName:last,email, password });
+      await authService.register({ firstName:first, lastName:last,email, password });
 
       router.push({
         pathname: "/(auth)/verify-otp",
         params: { email},
       });
     } catch (e: any) {
-      console.log(e)
+      
       setErr(getErrorMessage(e));
     } finally {
       setLoading(false);

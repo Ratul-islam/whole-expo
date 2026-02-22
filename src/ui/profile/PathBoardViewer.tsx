@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -15,6 +16,12 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 type HandBit = 0 | 1;
 export type PathStep = [number, HandBit];
+
+type ToastState =
+  | null
+  | { type: "success" | "error" | "info"; title: string; message?: string };
+
+type ActionFn = () => Promise<any> | void;
 
 export function PathBoardViewer({
   visible,
@@ -24,10 +31,36 @@ export function PathBoardViewer({
   rows = 4,
   cols = 5,
 
-  // ✅ Upload props
+  // ✅ context label
+  context = "OWNER", // "OWNER" | "LEADERBOARD"
+
+  // ✅ Upload to device (OWNER)
   canUpload = false,
   onUpload,
   uploadLabel = "UPLOAD TO DEVICE",
+  uploadBusy = false,
+
+  // ✅ Leaderboard visibility (OWNER)
+  canToggleLeaderboard = false,
+  isPublic = false,
+  onToggleLeaderboard,
+  leaderboardBusy = false,
+
+  // ✅ Edit (OWNER)
+  canEdit = false,
+  onEdit,
+  editLabel = "EDIT",
+  editBusy = false,
+
+  // ✅ Save/Unsave (LEADERBOARD)
+  canSave = false,
+  isSaved = false,
+  onSaveToggle,
+  saveBusy = false,
+
+  // ✅ Toast
+  toast,
+  onClearToast,
 }: {
   visible: boolean;
   path: PathStep[];
@@ -36,12 +69,39 @@ export function PathBoardViewer({
   rows?: number;
   cols?: number;
 
+  context?: "OWNER" | "LEADERBOARD";
+
+  // OWNER actions
   canUpload?: boolean;
-  onUpload?: () => void;
+  onUpload?: ActionFn;
   uploadLabel?: string;
+  uploadBusy?: boolean;
+
+  canToggleLeaderboard?: boolean;
+  isPublic?: boolean;
+  onToggleLeaderboard?: ActionFn;
+  leaderboardBusy?: boolean;
+
+  canEdit?: boolean;
+  onEdit?: ActionFn;
+  editLabel?: string;
+  editBusy?: boolean;
+
+  // LEADERBOARD actions
+  canSave?: boolean;
+  isSaved?: boolean;
+  onSaveToggle?: ActionFn;
+  saveBusy?: boolean;
+
+  // Toast
+  toast?: ToastState;
+  onClearToast?: () => void;
 }) {
   const modalScale = useRef(new Animated.Value(0.8)).current;
   const modalOpacity = useRef(new Animated.Value(0)).current;
+
+  const [localToast, setLocalToast] = useState<ToastState>(null);
+  const activeToast = toast ?? localToast;
 
   useEffect(() => {
     if (!visible) return;
@@ -51,18 +111,25 @@ export function PathBoardViewer({
     ]).start();
   }, [visible, modalScale, modalOpacity]);
 
+  useEffect(() => {
+    if (!activeToast) return;
+    const t = setTimeout(() => {
+      if (toast) onClearToast?.();
+      else setLocalToast(null);
+    }, 2200);
+    return () => clearTimeout(t);
+  }, [activeToast, toast, onClearToast]);
+
+  const showToast = (t: ToastState) => {
+    if (toast) return;
+    setLocalToast(t);
+  };
+
   const handleClose = () => {
     Animated.parallel([
       Animated.timing(modalScale, { toValue: 0.8, duration: 150, useNativeDriver: true }),
       Animated.timing(modalOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
     ]).start(() => onClose());
-  };
-
-  const uploadEnabled = !!canUpload && !!onUpload;
-
-  const handleUpload = () => {
-    if (!uploadEnabled) return;
-    onUpload?.();
   };
 
   const total = rows * cols;
@@ -87,19 +154,75 @@ export function PathBoardViewer({
     return map;
   }, [path]);
 
+  const anyBusy = !!(uploadBusy || leaderboardBusy || editBusy || saveBusy);
+
+  const safeRun = async (
+    fn: ActionFn | undefined,
+    start: ToastState,
+    ok: ToastState,
+    fail: (e: any) => ToastState
+  ) => {
+    if (!fn) return;
+    try {
+      showToast(start);
+      await fn();
+      showToast(ok);
+    } catch (e: any) {
+      showToast(fail(e));
+    }
+  };
+
+  // enabled flags
+  const uploadEnabled = !!canUpload && !!onUpload && !anyBusy;
+  const leaderboardEnabled = !!canToggleLeaderboard && !!onToggleLeaderboard && !anyBusy;
+  const editEnabled = !!canEdit && !!onEdit && !anyBusy;
+  const saveEnabled = !!canSave && !!onSaveToggle && !anyBusy;
+
   return (
     <Modal transparent visible={visible} animationType="none">
       <Pressable style={s.backdrop} onPress={handleClose}>
         <Animated.View style={[s.modal, { opacity: modalOpacity, transform: [{ scale: modalScale }] }]}>
-          {/* prevent closing when tapping inside */}
           <Pressable onPress={(e) => e.stopPropagation()}>
             <LinearGradient colors={["#1a1a2e", "#0f0f1a"]} style={s.content}>
+              {/* Toast */}
+              {activeToast ? (
+                <View
+                  style={[
+                    s.toast,
+                    activeToast.type === "success" && s.toastSuccess,
+                    activeToast.type === "error" && s.toastError,
+                    activeToast.type === "info" && s.toastInfo,
+                  ]}
+                >
+                  <Text style={s.toastTitle}>{activeToast.title}</Text>
+                  {activeToast.message ? <Text style={s.toastMsg}>{activeToast.message}</Text> : null}
+                </View>
+              ) : null}
+
               {/* Header */}
               <View style={s.header}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={s.title}>{pathName || "Untitled Route"}</Text>
-                  <Text style={s.sub}>{(path?.length || 0) + " steps"}</Text>
+
+                  <View style={s.headerRow}>
+                    <Text style={s.sub}>{(path?.length || 0) + " steps"}</Text>
+
+                    {/* OWNER: show public/private badge */}
+                    {context === "OWNER" && canToggleLeaderboard ? (
+                      <View style={[s.visibilityBadge, isPublic ? s.badgePublic : s.badgePrivate]}>
+                        <Text style={s.visibilityText}>{isPublic ? "PUBLIC" : "PRIVATE"}</Text>
+                      </View>
+                    ) : null}
+
+                    {/* LEADERBOARD: show saved badge */}
+                    {context === "LEADERBOARD" && canSave ? (
+                      <View style={[s.visibilityBadge, isSaved ? s.badgeSaved : s.badgeUnsaved]}>
+                        <Text style={s.visibilityText}>{isSaved ? "SAVED" : "NOT SAVED"}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
+
                 <Pressable onPress={handleClose} style={s.closeBtn}>
                   <Text style={s.closeText}>✕</Text>
                 </Pressable>
@@ -127,7 +250,7 @@ export function PathBoardViewer({
                           on && s.nodeOn,
                         ]}
                       >
-                        <Text style={[s.idx, on && s.idxOn]}>{idx+1}</Text>
+                        <Text style={[s.idx, on && s.idxOn]}>{idx + 1}</Text>
 
                         {on ? (
                           <>
@@ -152,7 +275,7 @@ export function PathBoardViewer({
                 </View>
               </View>
 
-              {/* Path sequence */}
+              {/* Sequence */}
               <View style={s.seqBox}>
                 <Text style={s.seqTitle}>PATH</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 52 }}>
@@ -185,30 +308,140 @@ export function PathBoardViewer({
                 />
               </View>
 
-              {/* ✅ Bottom action bar */}
+              {/* Actions */}
               <View style={s.actionBar}>
                 <Pressable onPress={handleClose} style={s.actionGhost}>
                   <Text style={s.actionGhostText}>CLOSE</Text>
                 </Pressable>
 
-                <Pressable
-                  onPress={handleUpload}
-                  disabled={!uploadEnabled}
-                  style={[s.actionPrimaryWrap, !uploadEnabled && { opacity: 0.45 }]}
-                >
-                  <LinearGradient
-                    colors={
-                      uploadEnabled
-                        ? ["#8B5CF6", "#6366F1"]
-                        : ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.06)"]
+                {/* OWNER: Edit */}
+                {context === "OWNER" && canEdit ? (
+                  <Pressable
+                    onPress={() =>
+                      safeRun(
+                        onEdit,
+                        { type: "info", title: "Opening", message: "Loading editor…" },
+                        { type: "success", title: "Ready", message: "Editor opened." },
+                        (e) => ({ type: "error", title: "Could not open", message: e?.message })
+                      )
                     }
-                    style={s.actionPrimary}
+                    disabled={!editEnabled}
+                    style={[s.actionMidWrap, !editEnabled && { opacity: 0.55 }]}
                   >
-                    <Text style={s.actionPrimaryText}>
-                      {uploadEnabled ? uploadLabel : "SCAN DEVICE TO UPLOAD"}
-                    </Text>
-                  </LinearGradient>
-                </Pressable>
+                    <LinearGradient colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0.06)"]} style={s.actionMid}>
+                      <View style={s.actionInnerRow}>
+                        {editBusy ? <ActivityIndicator /> : <Text style={s.actionIcon}>✎</Text>}
+                        <Text style={s.actionMidText} numberOfLines={1}>
+                          {editLabel}
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </Pressable>
+                ) : null}
+
+                {/* OWNER: public/private */}
+                {context === "OWNER" && canToggleLeaderboard ? (
+                  <Pressable
+                    onPress={() =>
+                      safeRun(
+                        onToggleLeaderboard,
+                        {
+                          type: "info",
+                          title: isPublic ? "Updating" : "Uploading",
+                          message: isPublic ? "Making route private…" : "Publishing to leaderboard…",
+                        },
+                        {
+                          type: "success",
+                          title: isPublic ? "Made private" : "Published",
+                          message: isPublic ? "Route is private now." : "Route is live on leaderboard.",
+                        },
+                        (e) => ({ type: "error", title: "Update failed", message: e?.message || "Try again." })
+                      )
+                    }
+                    disabled={!leaderboardEnabled}
+                    style={[s.actionMidWrap, !leaderboardEnabled && { opacity: 0.55 }]}
+                  >
+                    <LinearGradient
+                      colors={
+                        isPublic
+                          ? ["rgba(255,92,122,0.18)", "rgba(255,92,122,0.10)"]
+                          : ["rgba(122,162,255,0.22)", "rgba(122,162,255,0.12)"]
+                      }
+                      style={[s.actionMid, { borderColor: isPublic ? "rgba(255,92,122,0.38)" : "rgba(122,162,255,0.48)" }]}
+                    >
+                      <View style={s.actionInnerRow}>
+                        {leaderboardBusy ? <ActivityIndicator /> : <Text style={s.actionIcon}>{isPublic ? "⤓" : "↑"}</Text>}
+                        <Text style={s.actionMidText} numberOfLines={1}>
+                          {isPublic ? "MAKE PRIVATE" : "UPLOAD"}
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </Pressable>
+                ) : null}
+
+                {/* LEADERBOARD: Save/Unsave */}
+                {context === "LEADERBOARD" && canSave ? (
+                  <Pressable
+                    onPress={() =>
+                      safeRun(
+                        onSaveToggle,
+                        { type: "info", title: isSaved ? "Removing" : "Saving", message: isSaved ? "Removing from saved…" : "Saving route…" },
+                        { type: "success", title: isSaved ? "Removed" : "Saved", message: isSaved ? "Removed from saved." : "Saved to your routes." },
+                        (e) => ({ type: "error", title: "Failed", message: e?.message || "Try again." })
+                      )
+                    }
+                    disabled={!saveEnabled}
+                    style={[s.actionMidWrap, !saveEnabled && { opacity: 0.55 }]}
+                  >
+                    <LinearGradient
+                      colors={
+                        isSaved
+                          ? ["rgba(255,92,122,0.14)", "rgba(255,92,122,0.08)"]
+                          : ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.06)"]
+                      }
+                      style={[s.actionMid, { borderColor: isSaved ? "rgba(255,92,122,0.30)" : "rgba(255,255,255,0.12)" }]}
+                    >
+                      <View style={s.actionInnerRow}>
+                        {saveBusy ? <ActivityIndicator /> : <Text style={s.actionIcon}>{isSaved ? "✓" : "+"}</Text>}
+                        <Text style={s.actionMidText} numberOfLines={1}>
+                          {isSaved ? "UNSAVE" : "SAVE"}
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </Pressable>
+                ) : null}
+
+                {/* OWNER: Upload to device */}
+                {context === "OWNER" ? (
+                  <Pressable
+                    onPress={() =>
+                      safeRun(
+                        onUpload,
+                        { type: "info", title: "Uploading", message: "Sending to device…" },
+                        { type: "success", title: "Uploaded", message: "Route uploaded to device." },
+                        (e) => ({ type: "error", title: "Upload failed", message: e?.message || "Try again." })
+                      )
+                    }
+                    disabled={!uploadEnabled}
+                    style={[s.actionPrimaryWrap, !uploadEnabled && { opacity: 0.45 }]}
+                  >
+                    <LinearGradient
+                      colors={
+                        uploadEnabled
+                          ? ["#8B5CF6", "#6366F1"]
+                          : ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.06)"]
+                      }
+                      style={s.actionPrimary}
+                    >
+                      <View style={s.actionInnerRow}>
+                        {uploadBusy ? <ActivityIndicator /> : <Text style={s.actionIcon}>⎆</Text>}
+                        <Text style={s.actionPrimaryText} numberOfLines={1}>
+                          {uploadEnabled ? uploadLabel : "SCAN DEVICE TO UPLOAD"}
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </Pressable>
+                ) : null}
               </View>
             </LinearGradient>
           </Pressable>
@@ -226,7 +459,6 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     </View>
   );
 }
-
 function Div() {
   return <View style={s.statDiv} />;
 }
@@ -236,9 +468,38 @@ const s = StyleSheet.create({
   modal: { borderRadius: 24, overflow: "hidden", borderWidth: 1, borderColor: "rgba(139, 92, 246, 0.35)" },
   content: { padding: 18 },
 
+  toast: {
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  toastSuccess: { borderColor: "rgba(122,162,255,0.55)", backgroundColor: "rgba(122,162,255,0.14)" },
+  toastError: { borderColor: "rgba(255,92,122,0.45)", backgroundColor: "rgba(255,92,122,0.12)" },
+  toastInfo: { borderColor: "rgba(255,255,255,0.16)", backgroundColor: "rgba(255,255,255,0.06)" },
+  toastTitle: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 0.5 },
+  toastMsg: { marginTop: 4, color: "rgba(255,255,255,0.70)", fontWeight: "800", fontSize: 12 },
+
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 },
+  headerRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10 },
   title: { color: "#fff", fontSize: 20, fontWeight: "900" },
-  sub: { color: "rgba(255,255,255,0.55)", fontSize: 13, fontWeight: "700", marginTop: 3 },
+  sub: { color: "rgba(255,255,255,0.55)", fontSize: 13, fontWeight: "700" },
+
+  visibilityBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  badgePublic: { borderColor: "rgba(122,162,255,0.50)" },
+  badgePrivate: { borderColor: "rgba(255,255,255,0.14)" },
+  badgeSaved: { borderColor: "rgba(122,162,255,0.50)" },
+  badgeUnsaved: { borderColor: "rgba(255,255,255,0.14)" },
+  visibilityText: { color: "#EAF0FF", fontSize: 10, fontWeight: "900", letterSpacing: 1.2 },
+
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center" },
   closeText: { color: "#fff", fontSize: 18, fontWeight: "700" },
 
@@ -275,7 +536,6 @@ const s = StyleSheet.create({
   statLbl: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: "800", marginTop: 4, textAlign: "center" },
   statDiv: { width: 1, height: 34, backgroundColor: "rgba(255,255,255,0.1)" },
 
-  // Action bar
   actionBar: { marginTop: 14, flexDirection: "row", gap: 10 },
   actionGhost: {
     flex: 1,
@@ -288,13 +548,37 @@ const s = StyleSheet.create({
   },
   actionGhostText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1 },
 
-  actionPrimaryWrap: { flex: 2 },
+  actionMidWrap: { flex: 1.2 },
+  actionMid: {
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  actionMidText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 0.6, fontSize: 12 },
+
+  actionPrimaryWrap: { flex: 2.1 },
   actionPrimary: {
     borderRadius: 16,
     paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(139, 92, 246, 0.45)",
   },
-  actionPrimaryText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1 },
+  actionPrimaryText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 0.6, fontSize: 12 },
+
+  actionInnerRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  actionIcon: { color: "#EAF0FF", fontWeight: "900", fontSize: 12 },
 });

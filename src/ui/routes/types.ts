@@ -27,6 +27,7 @@ export type RouteCardModel = {
   steps: number;
   createdAt?: string;
   path: PathStep[];
+  isPublic: boolean
 };
 
 export type ConnectedDevice = { deviceId: string; deviceSecret: string } | null;

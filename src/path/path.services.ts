@@ -6,7 +6,9 @@ import type {
   newPathResponse,
   SavePathRequest,
   ListQuery,
+  UpdatePathRequest,
 } from "./path.types";
+
 
 export const pathService = {
   addNewPath: async (payload: newPathRequest) => {
@@ -24,6 +26,11 @@ export const pathService = {
     return data;
   },
 
+  updatePath: async (payload: UpdatePathRequest) => {
+    const { data } = await api.patch(ENDPOINTS.PATH.UPDATE, payload);
+    return data;
+  },
+
   savePath: async (payload: SavePathRequest) => {
     const { data } = await api.post(ENDPOINTS.PATH.SAVEPATH, payload);
     return data;
@@ -34,6 +41,7 @@ export const pathService = {
     const { data } = await api.delete(url);
     return data;
   },
+
   getSavedPaths: async (params?: ListQuery) => {
     const { data } = await api.get(ENDPOINTS.PATH.GETSAVEPATH, { params });
     return data;

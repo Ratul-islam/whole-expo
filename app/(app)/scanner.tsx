@@ -23,16 +23,12 @@ function isNonEmptyString(x: unknown): x is string {
   return typeof x === "string" && x.trim().length > 0;
 }
 
-/**
- * ✅ STRICT validator:
- * Accept ONLY:
- *   {"type":"device","deviceId":"...","deviceSecret":"...","v":1}
- */
 function parseStrictDeviceQr(raw: string): { ok: true; value: DeviceQrStrict } | { ok: false; reason: string } {
+
   const s = String(raw ?? "").trim();
   if (!s) return { ok: false, reason: "Wrong QR code." };
 
-  // reject obvious URLs
+  console.log(raw)
   if (/^https?:\/\//i.test(s)) return { ok: false, reason: "Wrong QR code." };
 
   const parsed = safeJsonParse(s);
@@ -55,7 +51,6 @@ function parseStrictDeviceQr(raw: string): { ok: true; value: DeviceQrStrict } |
 }
 
 function extractApiErrorMessage(err: any) {
-  // axios-style errors
   const msg =
     err?.response?.data?.message ||
     err?.response?.data?.error ||
@@ -74,10 +69,8 @@ export default function Scanner() {
 
   const [busy, setBusy] = useState(false);
 
-  // scan lock to avoid repeated triggers
   const scanLockRef = useRef(false);
 
-  // popup modal
   const [popup, setPopup] = useState<PopupState>({ open: false });
 
   useEffect(() => {
@@ -164,7 +157,6 @@ export default function Scanner() {
         onBarcodeScanned={onBarcodeScanned}
       />
 
-      {/* HUD overlay */}
       <View style={styles.hud}>
         <View style={styles.topRow}>
           <Pressable onPress={() => router.back()} style={styles.backBtn} hitSlop={10}>
@@ -202,7 +194,6 @@ export default function Scanner() {
         </View>
       </View>
 
-      {/* ✅ On-screen alert-style popup */}
       <Modal visible={popup.open} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>

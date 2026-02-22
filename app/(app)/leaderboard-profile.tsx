@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, Dimensions } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  Dimensions,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { ScreenLayout } from "../../src/ui/app/screenLayout";
@@ -10,7 +19,9 @@ import { StatCard } from "@/src/ui/profile/StatCard";
 import { GameCard, type ProfileSession } from "@/src/ui/profile/GameCard";
 import { RouteCard, type ProfilePath } from "@/src/ui/profile/RouteCard";
 import { PathBoardViewer, type PathStep } from "@/src/ui/profile/PathBoardViewer";
-import  {FloatingParticles}  from "@/src/ui/profile/FloatingParticles";
+import { FloatingParticles } from "@/src/ui/profile/FloatingParticles";
+
+import { pathService } from "@/src/path/path.services";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -39,8 +50,8 @@ type UserProfileResponse = {
       bestScore?: number;
       lastPlayedAt?: string | null;
     };
-    paths: Array<ProfilePath & { userId: string; path: PathStep[] }>;
-    recentGames: Array<ProfileSession & { status: SessionStatus }>;
+    paths: [ProfilePath & { userId: string; path: PathStep[] }];
+    recentGames: [ProfileSession & { status: SessionStatus }];
   };
 };
 
@@ -48,7 +59,12 @@ function formatTinyTime(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatDate(iso?: string | null) {
@@ -70,11 +86,16 @@ export default function LeaderboardProfileScreen() {
 
   const [viewingPath, setViewingPath] = useState<ProfilePath | null>(null);
 
+  const [savingBusy, setSavingBusy] = useState(false);
+  const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
+
   const load = async () => {
     try {
       setErrorText(null);
       const res = (await userService.PROFILE(userId)) as UserProfileResponse;
-      if (!res || res.status !== "success" || !res.data?.user) throw new Error(res?.message || "Failed to load profile");
+      if (!res || res.status !== "success" || !res.data?.user) {
+        throw new Error(res?.message || "Failed to load profile");
+      }
       setProfile(res.data);
     } catch (e: any) {
       setProfile(null);
@@ -117,6 +138,33 @@ export default function LeaderboardProfileScreen() {
 
   const bestScore = stats?.bestScore ?? 0;
 
+  const ensureSavedState = async (pathId: string) => {
+    if (savedMap[pathId] !== undefined) return;
+    try {
+      const res = await pathService.checkSavedPath(pathId);
+      const isSaved = !!(res as any)?.data?.saved || !!(res as any)?.saved;
+      setSavedMap((m) => ({ ...m, [pathId]: isSaved }));
+    } catch {
+    }
+  };
+
+  const toggleSave = async (pathId: string) => {
+    setSavingBusy(true);
+    try {
+      const currentlySaved = !!savedMap[pathId];
+
+      if (currentlySaved) {
+        await pathService.deleteSavedPath(pathId);
+        setSavedMap((m) => ({ ...m, [pathId]: false }));
+      } else {
+        await pathService.savePath({ pathId } as any);
+        setSavedMap((m) => ({ ...m, [pathId]: true }));
+      }
+    } finally {
+      setSavingBusy(false);
+    }
+  };
+
   return (
     <ScreenLayout title="" subtitle="">
       <View style={s.container}>
@@ -124,7 +172,14 @@ export default function LeaderboardProfileScreen() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={["#8B5CF6"]} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#8B5CF6"
+              colors={["#8B5CF6"]}
+            />
+          }
           contentContainerStyle={s.scrollContent}
         >
           <View style={s.header}>
@@ -161,7 +216,11 @@ export default function LeaderboardProfileScreen() {
               <LinearGradient colors={["rgba(139, 92, 246, 0.15)", "rgba(99, 102, 241, 0.05)"]} style={s.hero}>
                 <View style={s.heroGlow} />
 
-                <AnimatedAvatar firstName={profile.user.firstName} lastName={profile.user.lastName} verified={!!profile.user.isVerified} />
+                <AnimatedAvatar
+                  firstName={profile.user.firstName}
+                  lastName={profile.user.lastName}
+                  verified={!!profile.user.isVerified}
+                />
 
                 <Text style={s.name}>{name}</Text>
 
@@ -212,7 +271,15 @@ export default function LeaderboardProfileScreen() {
                 ) : (
                   <View style={{ gap: 10 }}>
                     {paths.slice(0, 5).map((r, i) => (
-                      <RouteCard key={r._id} route={r} index={i} onPress={() => setViewingPath(r)} />
+                      <RouteCard
+                        key={r._id}
+                        route={r}
+                        index={i}
+                        onPress={async () => {
+                          setViewingPath(r);
+                          await ensureSavedState(r._id);
+                        }}
+                      />
                     ))}
                   </View>
                 )}
@@ -228,10 +295,18 @@ export default function LeaderboardProfileScreen() {
         </ScrollView>
 
         <PathBoardViewer
+          context="LEADERBOARD"
           visible={!!viewingPath}
           path={(viewingPath?.path || []) as PathStep[]}
           pathName={viewingPath?.name || "Untitled Route"}
           onClose={() => setViewingPath(null)}
+          canSave={true}
+          isSaved={viewingPath ? !!savedMap[viewingPath._id] : false}
+          saveBusy={savingBusy}
+          onSaveToggle={() => {
+            if (!viewingPath) return;
+            return toggleSave(viewingPath._id);
+          }}
         />
       </View>
     </ScreenLayout>
@@ -265,7 +340,15 @@ const s = StyleSheet.create({
 
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 },
   backBtn: { borderRadius: 14, overflow: "hidden" },
-  backBtnGrad: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.1)" },
+  backBtnGrad: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
   backText: { color: "#fff", fontSize: 24, fontWeight: "700" },
   headerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", letterSpacing: 2 },
 

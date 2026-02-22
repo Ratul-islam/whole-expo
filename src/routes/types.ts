@@ -4,12 +4,12 @@ export type RouteDifficulty = "EASY" | "MEDIUM" | "HARD" | "PRO";
 
 export type RouteMove = {
   moveNumber: number;
-  holePosition: string; // ex: "A1", "B4", "12", etc (your peg board format)
+  holePosition: string; 
   hand: Hand;
 };
 
 export type RouteProgram = {
-  name: string; // optional label like "Program A"
+  name: string;
   moves: RouteMove[];
 };
 

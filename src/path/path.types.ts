@@ -23,3 +23,13 @@ export type ListQuery = {
   limit?: number;
   q?: string;
 };
+
+
+
+export type UpdatePathRequest = {
+  pathId: string;
+  name?: string;
+  path?: any[];
+  isPublic?: boolean;
+  incSaves?: number;
+};
