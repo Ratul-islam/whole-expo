@@ -8,6 +8,7 @@ type DeviceQrStrict = {
   type: "device";
   deviceId: string;
   deviceSecret: string;
+  boardConf: "4x5" | "2x5";
   v: 1;
 };
 
@@ -28,26 +29,29 @@ function parseStrictDeviceQr(raw: string): { ok: true; value: DeviceQrStrict } |
   const s = String(raw ?? "").trim();
   if (!s) return { ok: false, reason: "Wrong QR code." };
 
-  console.log(raw)
   if (/^https?:\/\//i.test(s)) return { ok: false, reason: "Wrong QR code." };
-
+  
   const parsed = safeJsonParse(s);
   if (!parsed || typeof parsed !== "object") return { ok: false, reason: "Wrong QR code." };
-
+  
   const obj = parsed as Record<string, unknown>;
-
+  
   if (obj.type !== "device") return { ok: false, reason: "Wrong QR code." };
   if (obj.v !== 1) return { ok: false, reason: "Unsupported QR version." };
-
+  
   if (!isNonEmptyString(obj.deviceId)) return { ok: false, reason: "Invalid device QR." };
+  console.log("new "+obj.deviceSecret)
   if (!isNonEmptyString(obj.deviceSecret)) return { ok: false, reason: "Invalid device QR." };
-
+  console.log(obj)
+  if (obj.boardConf !== "4x5" && obj.boardConf !== "2x5") return { ok: false, reason: "Wrong QR code." };
+  
   const deviceId = obj.deviceId.trim();
   const deviceSecret = obj.deviceSecret.trim();
+  const boardConf = obj.boardConf;
 
   if (deviceId.length < 3 || deviceSecret.length < 3) return { ok: false, reason: "Invalid device QR." };
 
-  return { ok: true, value: { type: "device", deviceId, deviceSecret, v: 1 } };
+  return { ok: true, value: { type: "device", deviceId, deviceSecret,boardConf, v: 1 } };
 }
 
 function extractApiErrorMessage(err: any) {
@@ -106,11 +110,12 @@ export default function Scanner() {
     }
 
     setBusy(true);
-
+    console.log(parsed.value.boardConf)
     try {
       await sessionService.start({
         deviceId: parsed.value.deviceId,
         deviceSecret: parsed.value.deviceSecret,
+        boardConf: parsed.value.boardConf
       });
 
       router.replace({

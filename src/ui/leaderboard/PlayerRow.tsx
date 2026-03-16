@@ -1,23 +1,5 @@
 import React, { useEffect, useRef } from "react";
 import { View, Text, StyleSheet, Pressable, Animated, Easing } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-
-export type LeaderboardItem = {
-  userId: string;
-  username: string;
-  totalScore: number;
-  gamesPlayed: number;
-  totalCorrect: number;
-  totalWrong: number;
-  lastPlayedAt: string | null;
-  rank: number;
-};
-
-function accuracy(p: LeaderboardItem) {
-  const t = (p.totalCorrect ?? 0) + (p.totalWrong ?? 0);
-  if (t <= 0) return 0;
-  return Math.round(((p.totalCorrect ?? 0) / t) * 100);
-}
 
 function medal(rank: number) {
   if (rank === 1) return "🥇";
@@ -27,12 +9,20 @@ function medal(rank: number) {
 }
 
 export default function PlayerRow({
-  player,
-  index,
+  rank,
+  title,
+  subtitle,
+  value,
+  valueLabel,
+  index = 0,
   onPress,
 }: {
-  player: LeaderboardItem;
-  index: number;
+  rank: number;
+  title: string;
+  subtitle?: string;
+  value: string | number;
+  valueLabel?: string;
+  index?: number;
   onPress: () => void;
 }) {
   const slide = useRef(new Animated.Value(18)).current;
@@ -56,31 +46,31 @@ export default function PlayerRow({
     ]).start();
   }, [index, slide, fade]);
 
-  const a = accuracy(player);
-
   return (
     <Animated.View style={{ transform: [{ translateY: slide }], opacity: fade }}>
-      <Pressable onPress={onPress}>
-        <LinearGradient colors={["rgba(255,255,255,0.07)", "rgba(255,255,255,0.02)"]} style={s.row}>
+      <Pressable onPress={onPress} style={({ pressed }) => [pressed && s.pressed]}>
+        <View style={s.row}>
           <View style={s.rankCol}>
-            <Text style={s.rankText}>#{player.rank}</Text>
-            {!!medal(player.rank) && <Text style={s.medal}>{medal(player.rank)}</Text>}
+            <Text style={s.rankText}>#{rank}</Text>
+            {!!medal(rank) && <Text style={s.medal}>{medal(rank)}</Text>}
           </View>
 
           <View style={s.mid}>
             <Text style={s.name} numberOfLines={1}>
-              {player.username || "Player"}
+              {title}
             </Text>
-            <Text style={s.meta}>
-              {player.gamesPlayed} games • {a}% acc
-            </Text>
+            {!!subtitle ? (
+              <Text style={s.meta} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            ) : null}
           </View>
 
           <View style={s.scoreCol}>
-            <Text style={s.score}>{(player.totalScore ?? 0).toLocaleString()}</Text>
-            <View style={s.scoreBar} />
+            <Text style={s.score}>{value}</Text>
+            <Text style={s.valueLabel}>{valueLabel || ""}</Text>
           </View>
-        </LinearGradient>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -93,15 +83,64 @@ const s = StyleSheet.create({
     padding: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "#E3E3E3",
+    backgroundColor: "#F7F7F7",
   },
-  rankCol: { width: 54, alignItems: "flex-start" },
-  rankText: { color: "rgba(255,255,255,0.80)", fontWeight: "900" },
-  medal: { marginTop: 2, fontSize: 14, opacity: 0.9 },
-  mid: { flex: 1 },
-  name: { color: "#fff", fontWeight: "900", fontSize: 15 },
-  meta: { color: "rgba(255,255,255,0.55)", fontWeight: "700", marginTop: 3, fontSize: 12 },
-  scoreCol: { alignItems: "flex-end" },
-  score: { color: "#fff", fontWeight: "900", fontSize: 18 },
-  scoreBar: { width: 40, height: 3, borderRadius: 3, backgroundColor: "rgba(99,102,241,0.9)", marginTop: 6 },
+
+  pressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.995 }],
+  },
+
+  rankCol: {
+    width: 54,
+    alignItems: "flex-start",
+  },
+
+  rankText: {
+    color: "#444444",
+    fontWeight: "700",
+  },
+
+  medal: {
+    marginTop: 2,
+    fontSize: 14,
+    opacity: 0.9,
+  },
+
+  mid: {
+    flex: 1,
+  },
+
+  name: {
+    color: "#111111",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+
+  meta: {
+    color: "#6B6B6B",
+    fontWeight: "500",
+    marginTop: 3,
+    fontSize: 12,
+  },
+
+  scoreCol: {
+    alignItems: "flex-end",
+    minWidth: 70,
+  },
+
+  score: {
+    color: "#111111",
+    fontWeight: "700",
+    fontSize: 18,
+  },
+
+  valueLabel: {
+    color: "#7A7A7A",
+    fontWeight: "700",
+    marginTop: 2,
+    letterSpacing: 1,
+    fontSize: 11,
+  },
 });

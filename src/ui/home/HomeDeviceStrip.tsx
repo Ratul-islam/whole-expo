@@ -6,7 +6,7 @@ type Props = {
   loading: boolean;
   connected: boolean;
   deviceId: string;
-  phase?: DevicePhase; // ✅ NEW
+  phase?: DevicePhase;
   onActionPress: () => void;
 };
 

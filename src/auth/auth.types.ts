@@ -41,6 +41,10 @@ export type RegisterRequest = {
   password: string;
 };
 
+export type checkRequest = {
+  email: string;
+};
+
 export type RegisterResponse = {
   message: string;
   data: {

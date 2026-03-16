@@ -1,5 +1,11 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { ConnectedDevice, RouteCardModel, Tab } from "./types";
 import { timeTiny } from "./helpers";
@@ -12,66 +18,104 @@ export function RouteCard(props: {
   onDelete: () => void;
 }) {
   const { item, tab, device, onPress, onDelete } = props;
+  const { width } = useWindowDimensions();
+
+  const isSmallPhone = width < 360;
+  const isTablet = width >= 768;
+
   const canUpload = !!(device?.deviceId && device?.deviceSecret);
 
+  const ui = {
+    radius: isTablet ? 20 : 18,
+    padding: isTablet ? 14 : isSmallPhone ? 11 : 12,
+    titleSize: isTablet ? 16 : 15,
+    labelSize: isTablet ? 10.5 : 10,
+    valueSize: isTablet ? 12.5 : 12,
+    actionTitle: isTablet ? 13 : 12,
+    actionSub: isTablet ? 11.5 : 11,
+  };
+
   return (
-    <Pressable onPress={onPress} style={s.press}>
-      {/* frame */}
-      <View style={s.frameOuter}>
+    <Pressable onPress={onPress} style={styles.press}>
+      <View style={[styles.frameOuter, { borderRadius: ui.radius }]}>
         <LinearGradient
-          colors={["rgba(0,255,209,0.22)", "rgba(139,92,246,0.18)", "rgba(255,255,255,0.06)"]}
+          colors={["rgba(17,17,17,0.04)", "rgba(17,17,17,0.02)", "rgba(255,255,255,0.7)"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={s.frameGradient}
+          style={styles.frameGradient}
         />
-        <View style={s.frameInner}>
-          {/* subtle HUD overlays */}
-          <View pointerEvents="none" style={s.grid} />
-          <View pointerEvents="none" style={s.scan} />
 
-          {/* top row */}
-          <View style={s.topRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.title} numberOfLines={1}>
-                {String(item.title || "UNTITLED").toUpperCase()}
+        <View
+          style={[
+            styles.frameInner,
+            {
+              borderRadius: ui.radius,
+              padding: ui.padding,
+            },
+          ]}
+        >
+          <View pointerEvents="none" style={styles.grid} />
+          <View pointerEvents="none" style={styles.scan} />
+
+          <View style={styles.topRow}>
+            <View style={styles.titleWrap}>
+              <Text
+                style={[styles.title, { fontSize: ui.titleSize }]}
+                numberOfLines={1}
+              >
+                {String(item.title || "UNTITLED")}
               </Text>
 
-              <View style={s.metaRow}>
-                <Pill label="STEPS" value={String(item.steps)} />
-                {!!item.createdAt && <PillSoft text={timeTiny(item.createdAt)} />}
-                <StatusPill on={canUpload} />
+              <View style={styles.metaRow}>
+                <Pill
+                  label="Steps"
+                  value={String(item.steps)}
+                  labelSize={ui.labelSize}
+                  valueSize={ui.valueSize}
+                />
+
+                {!!item.createdAt && (
+                  <PillSoft
+                    text={timeTiny(item.createdAt)}
+                    labelSize={ui.labelSize}
+                  />
+                )}
+
+                <StatusPill on={canUpload} labelSize={ui.labelSize} />
               </View>
             </View>
 
-            <Pressable onPress={onDelete} style={s.dangerBtn} hitSlop={8}>
-              <Text style={s.dangerBtnText}>{tab === "CREATED" ? "DELETE" : "REMOVE"}</Text>
+            <Pressable onPress={onDelete} style={styles.dangerBtn} hitSlop={8}>
+              <Text style={styles.dangerBtnText}>
+                {tab === "CREATED" ? "DELETE" : "REMOVE"}
+              </Text>
             </Pressable>
           </View>
 
-          {/* divider */}
-          <View style={s.divider} />
+          <View style={styles.divider} />
 
-          {/* action strip */}
           <LinearGradient
             colors={
               canUpload
-                ? ["rgba(0,255,209,0.30)", "rgba(139,92,246,0.24)"]
-                : ["rgba(255,255,255,0.10)", "rgba(255,255,255,0.04)"]
+                ? ["rgba(17,17,17,0.06)", "rgba(17,17,17,0.03)"]
+                : ["rgba(0,0,0,0.02)", "rgba(0,0,0,0.01)"]
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={s.actionStrip}
+            style={styles.actionStrip}
           >
-            <View style={s.actionLeft}>
-              <Text style={s.actionTitle}>OPEN</Text>
-              <Text style={s.actionSub} numberOfLines={1}>
+            <View style={styles.actionLeft}>
+              <Text style={[styles.actionTitle, { fontSize: ui.actionTitle }]}>
+                OPEN
+              </Text>
+              <Text style={[styles.actionSub, { fontSize: ui.actionSub }]} numberOfLines={1}>
                 {canUpload ? "Preview • Upload available" : "Preview"}
               </Text>
             </View>
 
-            <View style={s.actionRight}>
-              <View style={s.chevBox}>
-                <Text style={s.chev}>&gt;</Text>
+            <View style={styles.actionRight}>
+              <View style={styles.chevBox}>
+                <Text style={styles.chev}>›</Text>
               </View>
             </View>
           </LinearGradient>
@@ -81,66 +125,91 @@ export function RouteCard(props: {
   );
 }
 
-function Pill({ label, value }: { label: string; value: string }) {
+function Pill({
+  label,
+  value,
+  labelSize,
+  valueSize,
+}: {
+  label: string;
+  value: string;
+  labelSize: number;
+  valueSize: number;
+}) {
   return (
-    <View style={s.pill}>
-      <Text style={s.pillLabel}>{label}</Text>
-      <Text style={s.pillValue}>{value}</Text>
+    <View style={styles.pill}>
+      <Text style={[styles.pillLabel, { fontSize: labelSize }]}>{label.toUpperCase()}</Text>
+      <Text style={[styles.pillValue, { fontSize: valueSize }]}>{value}</Text>
     </View>
   );
 }
 
-function PillSoft({ text }: { text: string }) {
+function PillSoft({
+  text,
+  labelSize,
+}: {
+  text: string;
+  labelSize: number;
+}) {
   return (
-    <View style={s.pillSoft}>
-      <Text style={s.pillSoftText}>{String(text).toUpperCase()}</Text>
+    <View style={styles.pillSoft}>
+      <Text style={[styles.pillSoftText, { fontSize: labelSize }]}>
+        {String(text).toUpperCase()}
+      </Text>
     </View>
   );
 }
 
-function StatusPill({ on }: { on: boolean }) {
+function StatusPill({
+  on,
+  labelSize,
+}: {
+  on: boolean;
+  labelSize: number;
+}) {
   return (
-    <View style={[s.status, on ? s.statusOn : s.statusOff]}>
-      <View style={[s.dot, on ? s.dotOn : s.dotOff]} />
-      <Text style={s.statusText}>{on ? "DEVICE" : "OFFLINE"}</Text>
+    <View style={[styles.status, on ? styles.statusOn : styles.statusOff]}>
+      <View style={[styles.dot, on ? styles.dotOn : styles.dotOff]} />
+      <Text style={[styles.statusText, { fontSize: labelSize }]}>
+        {on ? "DEVICE" : "OFFLINE"}
+      </Text>
     </View>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   press: {
     marginTop: 12,
   },
 
   frameOuter: {
-    borderRadius: 18,
     overflow: "hidden",
   },
+
   frameGradient: {
     ...StyleSheet.absoluteFillObject,
   },
+
   frameInner: {
-    borderRadius: 18,
-    padding: 12,
-    backgroundColor: "rgba(8, 10, 16, 0.86)",
+    backgroundColor: "#F7F7F7",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "#D9D9D9",
   },
 
-  // overlays
   grid: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.08,
+    opacity: 0.25,
     backgroundColor: "transparent",
     borderLeftWidth: 1,
-    borderLeftColor: "rgba(255,255,255,0.10)",
+    borderLeftColor: "rgba(17,17,17,0.04)",
   },
+
   scan: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.07,
+    opacity: 0.2,
     backgroundColor: "transparent",
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.14)",
+    borderTopColor: "rgba(17,17,17,0.05)",
     transform: [{ rotate: "-10deg" }],
   },
 
@@ -150,11 +219,14 @@ const s = StyleSheet.create({
     gap: 10,
   },
 
+  titleWrap: {
+    flex: 1,
+  },
+
   title: {
-    color: "#EAF0FF",
-    fontSize: 15,
-    fontWeight: "900",
-    letterSpacing: 1.4,
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 
   metaRow: {
@@ -172,36 +244,36 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "#E3E3E3",
   },
+
   pillLabel: {
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.3,
+    color: "#7A7A7A",
+    fontWeight: "700",
+    letterSpacing: 0.8,
   },
+
   pillValue: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0.6,
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 
   pillSoft: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.30)",
+    backgroundColor: "#EFEFEF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
+
   pillSoftText: {
-    color: "rgba(255,255,255,0.70)",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.1,
+    color: "#6B6B6B",
+    fontWeight: "700",
+    letterSpacing: 0.7,
   },
 
   status: {
@@ -213,47 +285,57 @@ const s = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
+
   statusOn: {
-    backgroundColor: "rgba(0,255,209,0.10)",
-    borderColor: "rgba(0,255,209,0.28)",
+    backgroundColor: "rgba(34,160,107,0.10)",
+    borderColor: "rgba(34,160,107,0.25)",
   },
+
   statusOff: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "#EFEFEF",
+    borderColor: "#D9D9D9",
   },
+
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  dotOn: { backgroundColor: "rgba(0,255,209,0.95)" },
-  dotOff: { backgroundColor: "rgba(255,255,255,0.35)" },
+
+  dotOn: {
+    backgroundColor: "#22A06B",
+  },
+
+  dotOff: {
+    backgroundColor: "#A0A0A0",
+  },
+
   statusText: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
+    color: "#444444",
+    fontWeight: "700",
+    letterSpacing: 0.7,
   },
 
   dangerBtn: {
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 14,
-    backgroundColor: "rgba(239,68,68,0.10)",
+    backgroundColor: "rgba(225,85,114,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.30)",
+    borderColor: "rgba(225,85,114,0.25)",
   },
+
   dangerBtnText: {
-    color: "rgba(255,225,225,0.95)",
+    color: "#C44760",
     fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
+    fontWeight: "700",
+    letterSpacing: 0.8,
   },
 
   divider: {
     marginTop: 12,
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#E3E3E3",
   },
 
   actionStrip: {
@@ -261,25 +343,26 @@ const s = StyleSheet.create({
     borderRadius: 16,
     padding: 1,
   },
+
   actionLeft: {
     flex: 1,
     borderRadius: 15,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    backgroundColor: "rgba(0,0,0,0.40)",
+    backgroundColor: "#FFFFFF",
   },
+
   actionTitle: {
-    color: "#EAF0FF",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1.6,
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 1,
   },
+
   actionSub: {
     marginTop: 4,
-    color: "rgba(255,255,255,0.68)",
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.4,
+    color: "#6B6B6B",
+    fontWeight: "500",
+    letterSpacing: 0.2,
   },
 
   actionRight: {
@@ -289,20 +372,22 @@ const s = StyleSheet.create({
     bottom: 10,
     justifyContent: "center",
   },
+
   chevBox: {
     width: 34,
     height: 34,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#EFEFEF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "#D9D9D9",
   },
+
   chev: {
-    color: "#EAF0FF",
-    fontSize: 16,
-    fontWeight: "900",
-    marginTop: -1,
+    color: "#111111",
+    fontSize: 20,
+    fontWeight: "700",
+    marginTop: -2,
   },
 });

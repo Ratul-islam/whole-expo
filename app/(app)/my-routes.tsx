@@ -7,6 +7,7 @@ import {
   FlatList,
   RefreshControl,
   ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -21,13 +22,17 @@ import type {
   ApiMeta,
   ApiResponse,
   ConnectedDevice,
-  PathDTO,
   PathStep,
   RouteCardModel,
   Tab,
 } from "@/src/ui/routes/types";
 
-import { pickKey, safeArr, titleSafe, unwrapPayload } from "@/src/ui/routes/helpers";
+import {
+  pickKey,
+  safeArr,
+  titleSafe,
+  unwrapPayload,
+} from "@/src/ui/routes/helpers";
 import { RoutesHeader } from "@/src/ui/routes/RoutesHeader";
 import { RouteCard } from "@/src/ui/routes/RouteCard";
 import { ConfirmSheet } from "@/src/ui/routes/ConfirmSheet";
@@ -38,8 +43,22 @@ type Notice =
   | null
   | { type: "info" | "success" | "error"; title: string; message?: string };
 
+const normalizeBoardConf = (v: string) => v.trim().replace(/×/g, "x");
+
 export default function MyRoutesScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+
+  const isTablet = width >= 768;
+
+  const ui = {
+    contentBottom: isTablet ? 32 : 24,
+    cardGap: isTablet ? 12 : 10,
+    modePadding: isTablet ? 14 : 12,
+    footerPad: isTablet ? 18 : 16,
+    buttonRadius: isTablet ? 18 : 16,
+    smallText: isTablet ? 13 : 12,
+  };
 
   const [tab, setTab] = useState<Tab>("CREATED");
   const [query, setQuery] = useState("");
@@ -57,12 +76,16 @@ export default function MyRoutesScreen() {
   const [fallbackAll, setFallbackAll] = useState<any[]>([]);
 
   const [deviceConnected, setDeviceConnected] = useState<ConnectedDevice>(null);
+  const [deviceReady, setDeviceReady] = useState(false);
+
   const [selected, setSelected] = useState<RouteCardModel | null>(null);
 
   const [notice, setNotice] = useState<Notice>(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<RouteCardModel | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<RouteCardModel | null>(
+    null
+  );
 
   const [editMode, setEditMode] = useState(false);
 
@@ -72,14 +95,19 @@ export default function MyRoutesScreen() {
   queryRef.current = query;
 
   const data = tab === "CREATED" ? created : saved;
-  const canUpload = !!(deviceConnected?.deviceId && deviceConnected?.deviceSecret);
+  const canUpload = !!(
+    deviceConnected?.deviceId &&
+    deviceConnected?.deviceSecret &&
+    deviceConnected?.boardConf
+  );
 
   const mapToModel = (raw: any): RouteCardModel => {
-    const p = raw?.path?._id ? raw.path : raw; // supports saved items like { path: {...} }
+    const p = raw?.path?._id ? raw.path : raw;
     return {
       id: p?._id ?? p?.id,
       title: titleSafe(p?.name),
       steps: safeArr(p?.path).length,
+      boardConf: p.boardConf,
       createdAt: p?.createdAt,
       path: safeArr<PathStep>(p?.path),
       isPublic: !!p?.isPublic,
@@ -103,22 +131,37 @@ export default function MyRoutesScreen() {
 
       const connectedFlag = payload?.connected;
       const deviceId = pickKey(payload, ["deviceId", "deviceID", "device_id"]);
-      const deviceSecret = pickKey(payload, ["deviceSecret", "device_secret"]);
+      const deviceSecret = pickKey(payload, [
+        "deviceSecret",
+        "device_secret",
+      ]);
 
-      if (connectedFlag === false) {
+      const rawBoard = pickKey(payload, [
+        "boardConf",
+        "board_conf",
+        "boardCONF",
+      ]) as string | undefined;
+
+      const boardConf = rawBoard ? normalizeBoardConf(rawBoard) : undefined;
+
+      if (connectedFlag === false || !deviceId || !deviceSecret) {
         setDeviceConnected(null);
         return;
       }
 
-      if (!deviceId || !deviceSecret) {
-        setDeviceConnected(null);
-        return;
-      }
+      setDeviceConnected({
+        deviceId,
+        deviceSecret,
+        boardConf,
+        sessionId: payload.sessionId._id,
+      } as any);
 
-      setDeviceConnected({ deviceId, deviceSecret });
+      if (boardConf) setQuery(boardConf);
     } catch (err) {
       console.log("device status error:", err);
       setDeviceConnected(null);
+    } finally {
+      setDeviceReady(true);
     }
   };
 
@@ -128,20 +171,34 @@ export default function MyRoutesScreen() {
     try {
       setErrorText(null);
 
+      const deviceBoard = deviceConnected?.boardConf
+        ? normalizeBoardConf(deviceConnected.boardConf)
+        : "";
+
       const q = queryRef.current.trim();
       const nextPage = reset ? 1 : page;
+      const params: any = { page: nextPage, limit: LIMIT };
+
+      if (deviceBoard) {
+        params.boardConf = deviceBoard;
+      } else if (q) {
+        params.q = q;
+      }
 
       const res = (tab === "SAVED"
-        ? await pathService.getSavedPaths({ page: nextPage, limit: LIMIT, q } as any)
-        : await pathService.getAllPath({ page: nextPage, limit: LIMIT, q } as any)) as ApiResponse | any;
-        console.log(res)
+        ? await pathService.getSavedPaths(params)
+        : await pathService.getAllPath(params)) as ApiResponse | any;
+
       const ok = res && res.status === "success";
       const meta: ApiMeta | undefined = ok ? res.meta : res?.meta;
 
-      const dataRaw = ok ? safeArr<any>(res.data.list) : safeArr<any>(res?.data.list);
+      const dataRaw = ok
+        ? safeArr<any>(res.data.list)
+        : safeArr<any>(res?.data.list);
 
       const backendHasPaging =
-        !!meta && (typeof meta.hasMore === "boolean" || typeof meta.total === "number");
+        !!meta &&
+        (typeof meta.hasMore === "boolean" || typeof meta.total === "number");
 
       const setList = tab === "SAVED" ? setSaved : setCreated;
       const currentList = tab === "SAVED" ? saved : created;
@@ -166,16 +223,26 @@ export default function MyRoutesScreen() {
         return;
       }
 
-      // fallback: backend returns ALL
       const normalized = dataRaw.map((raw: any) => {
         const p = raw?.path?._id ? raw.path : raw;
-        return { ...raw, ...p, name: titleSafe(p?.name), path: safeArr<PathStep>(p?.path) };
+        return {
+          ...raw,
+          ...p,
+          name: titleSafe(p?.name),
+          path: safeArr<PathStep>(p?.path),
+          boardConf: p?.boardConf,
+        };
       });
 
       const base = reset || fallbackAll.length === 0 ? normalized : fallbackAll;
       if (reset || fallbackAll.length === 0) setFallbackAll(normalized);
 
       const filtered = base.filter((p: any) => {
+        if (deviceBoard) {
+          const docBoard = p?.boardConf ? normalizeBoardConf(p.boardConf) : "";
+          return docBoard === deviceBoard;
+        }
+
         if (!q) return true;
         const hay = `${p.name} ${safeArr(p.path).length}`.toLowerCase();
         return hay.includes(q.toLowerCase());
@@ -193,7 +260,11 @@ export default function MyRoutesScreen() {
       setRefreshing(false);
     } catch (e: any) {
       setErrorText(e?.message || "Failed to load routes.");
-      setNotice({ type: "error", title: "Could not load routes", message: e?.message });
+      setNotice({
+        type: "error",
+        title: "Could not load routes",
+        message: e?.message,
+      });
       setLoading(false);
       setLoadingMore(false);
       setRefreshing(false);
@@ -206,13 +277,15 @@ export default function MyRoutesScreen() {
   }, []);
 
   useEffect(() => {
+    if (!deviceReady) return;
     setLoading(true);
     resetPaging();
     fetchPage({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, deviceReady]);
 
   useEffect(() => {
+    if (!deviceReady) return;
     const t = setTimeout(() => {
       setLoading(true);
       resetPaging();
@@ -220,7 +293,7 @@ export default function MyRoutesScreen() {
     }, 220);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [query, deviceReady]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -250,15 +323,22 @@ export default function MyRoutesScreen() {
     }
 
     try {
-      setNotice({ type: "info", title: "Uploading", message: "Sending route to device…" });
+      setNotice({
+        type: "info",
+        title: "Uploading",
+        message: "Sending route to device…",
+      });
 
       await deviceService.loadPreset({
-        deviceId: deviceConnected.deviceId,
-        deviceSecret: deviceConnected.deviceSecret,
+        id: deviceConnected.sessionId,
         pathId: selected.id,
       });
 
-      setNotice({ type: "success", title: "Uploaded", message: "Route uploaded to device." });
+      setNotice({
+        type: "success",
+        title: "Uploaded",
+        message: "Route uploaded to device.",
+      });
       setSelected(null);
       router.push("/(app)");
     } catch (e: any) {
@@ -281,16 +361,21 @@ export default function MyRoutesScreen() {
         isPublic: next,
       });
 
-      setCreated((prev) => prev.map((x) => (x.id === route.id ? { ...x, isPublic: next } : x)));
+      setCreated((prev) =>
+        prev.map((x) => (x.id === route.id ? { ...x, isPublic: next } : x))
+      );
 
       setNotice({
         type: "success",
         title: next ? "Uploaded" : "Made private",
-        message: next ? "This route is now on the leaderboard." : "This route is now private.",
+        message: next
+          ? "This route is now on the leaderboard."
+          : "This route is now private.",
       });
 
-      // keep selected in sync if open
-      setSelected((cur) => (cur?.id === route.id ? { ...cur, isPublic: next } : cur));
+      setSelected((cur) =>
+        cur?.id === route.id ? { ...cur, isPublic: next } : cur
+      );
     } catch (e: any) {
       setNotice({
         type: "error",
@@ -314,13 +399,20 @@ export default function MyRoutesScreen() {
     setConfirmOpen(false);
     setPendingDelete(null);
 
-    // ✅ SAVED: unsave via API
     if (tab === "SAVED") {
       try {
-        setNotice({ type: "info", title: "Removing", message: "Removing from saved…" });
+        setNotice({
+          type: "info",
+          title: "Removing",
+          message: "Removing from saved…",
+        });
         await pathService.deleteSavedPath(r.id);
         setSaved((prev) => prev.filter((x) => x.id !== r.id));
-        setNotice({ type: "success", title: "Removed", message: "Route removed from saved list." });
+        setNotice({
+          type: "success",
+          title: "Removed",
+          message: "Route removed from saved list.",
+        });
       } catch (err: any) {
         setNotice({
           type: "error",
@@ -331,7 +423,6 @@ export default function MyRoutesScreen() {
       return;
     }
 
-    // ✅ CREATED: delete route
     try {
       setNotice({ type: "info", title: "Deleting", message: "Removing route…" });
       await pathService.deletePath({ pathId: r.id });
@@ -351,34 +442,50 @@ export default function MyRoutesScreen() {
 
     if (tab === "SAVED") {
       return (
-        <View style={{ marginTop: 10 }}>
+        <View style={styles.emptyWrap}>
           <EmptyState title="No saved routes" hint="Saved routes will appear here." />
         </View>
       );
     }
 
+    console.log(data)
     return (
-      <View style={{ marginTop: 10 }}>
+      <View style={styles.emptyWrap}>
         <EmptyState
           title={query.trim() ? "No results" : "No routes yet"}
-          hint={query.trim() ? "Try a different search." : "Create your first route to get started."}
+          hint={
+            query.trim()
+              ? "Try a different search."
+              : "Create your first route to get started."
+          }
         />
         {!query.trim() ? (
-          <Pressable onPress={goCreate} style={s.emptyBtn}>
-            <Text style={s.emptyBtnText}>OPEN ROUTE EDITOR</Text>
+          <Pressable
+            onPress={goCreate}
+            style={[
+              styles.emptyBtn,
+              {
+                borderRadius: ui.buttonRadius,
+              },
+            ]}
+          >
+            <Text style={styles.emptyBtnText}>OPEN ROUTE EDITOR</Text>
           </Pressable>
         ) : null}
       </View>
     );
   };
 
+
+
+  console.log(data)
   return (
     <ScreenLayout title="" subtitle="">
       <FlatList
         data={data}
         keyExtractor={(x) => x.id}
         renderItem={({ item }) => (
-          <View style={{ marginBottom: 10 }}>
+          <View style={{ marginBottom: ui.cardGap }}>
             <RouteCard
               item={item}
               tab={tab}
@@ -388,7 +495,7 @@ export default function MyRoutesScreen() {
             />
 
             {tab === "CREATED" && editMode ? (
-              <View style={x.editRow}>
+              <View style={styles.editRow}>
                 <Pressable
                   onPress={() =>
                     router.push({
@@ -396,21 +503,35 @@ export default function MyRoutesScreen() {
                       params: { pathId: item.id },
                     } as any)
                   }
-                  style={x.editBtn}
+                  style={[
+                    styles.editBtn,
+                    { borderRadius: ui.buttonRadius },
+                  ]}
                 >
-                  <Text style={x.editBtnText}>EDIT</Text>
+                  <Text style={[styles.editBtnText, { fontSize: ui.smallText }]}>
+                    EDIT
+                  </Text>
                 </Pressable>
 
                 <Pressable
                   onPress={() => toggleLeaderboard(item)}
                   disabled={busyVisibilityId === item.id}
                   style={[
-                    x.leaderBtn,
-                    item.isPublic ? x.leaderBtnOff : x.leaderBtnOn,
+                    styles.leaderBtn,
+                    item.isPublic ? styles.leaderBtnOff : styles.leaderBtnOn,
                     busyVisibilityId === item.id && { opacity: 0.6 },
+                    { borderRadius: ui.buttonRadius },
                   ]}
                 >
-                  <Text style={x.leaderBtnText}>
+                  <Text
+                    style={[
+                      styles.leaderBtnText,
+                      item.isPublic
+                        ? styles.leaderBtnTextOff
+                        : styles.leaderBtnTextOn,
+                      { fontSize: ui.smallText },
+                    ]}
+                  >
                     {busyVisibilityId === item.id
                       ? "UPDATING…"
                       : item.isPublic
@@ -437,41 +558,70 @@ export default function MyRoutesScreen() {
             />
 
             {tab === "CREATED" ? (
-              <View style={x.modeBar}>
-                <Text style={x.modeLabel}>EDIT MODE</Text>
+              <View
+                style={[
+                  styles.modeBar,
+                  {
+                    padding: ui.modePadding,
+                  },
+                ]}
+              >
+                <Text style={[styles.modeLabel, { fontSize: ui.smallText }]}>
+                  EDIT MODE
+                </Text>
 
                 <Pressable
                   onPress={() => setEditMode((v) => !v)}
-                  style={[x.modeToggle, editMode && x.modeToggleOn]}
+                  style={[
+                    styles.modeToggle,
+                    editMode && styles.modeToggleOn,
+                    { borderRadius: ui.buttonRadius },
+                  ]}
                 >
-                  <View style={[x.checkBox, editMode && x.checkBoxOn]}>
-                    {editMode ? <Text style={x.checkMark}>✓</Text> : null}
+                  <View style={[styles.checkBox, editMode && styles.checkBoxOn]}>
+                    {editMode ? <Text style={styles.checkMark}>✓</Text> : null}
                   </View>
-                  <Text style={x.modeToggleText}>{editMode ? "ON" : "OFF"}</Text>
+                  <Text
+                    style={[
+                      styles.modeToggleText,
+                      editMode && styles.modeToggleTextOn,
+                      { fontSize: ui.smallText },
+                    ]}
+                  >
+                    {editMode ? "ON" : "OFF"}
+                  </Text>
                 </Pressable>
               </View>
             ) : null}
           </>
         }
         ListEmptyComponent={empty}
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: ui.contentBottom }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#111111"
+          />
+        }
         onEndReachedThreshold={0.35}
         onEndReached={onEndReached}
         ListFooterComponent={
           loading || loadingMore ? (
-            <View style={s.footer}>
-              <ActivityIndicator />
-              <Text style={s.footerText}>{loading ? "Loading…" : "Loading more…"}</Text>
+            <View style={[styles.footer, { paddingVertical: ui.footerPad }]}>
+              <ActivityIndicator color="#111111" />
+              <Text style={styles.footerText}>
+                {loading ? "Loading…" : "Loading more…"}
+              </Text>
             </View>
           ) : hasMore ? (
-            <View style={s.footer}>
-              <Text style={s.footerMuted}>Scroll to load more</Text>
+            <View style={[styles.footer, { paddingVertical: ui.footerPad }]}>
+              <Text style={styles.footerMuted}>Scroll to load more</Text>
             </View>
           ) : data.length > 0 ? (
-            <View style={s.footer}>
-              <Text style={s.footerMuted}>End</Text>
+            <View style={[styles.footer, { paddingVertical: ui.footerPad }]}>
+              <Text style={styles.footerMuted}>End</Text>
             </View>
           ) : (
             <View style={{ height: 10 }} />
@@ -481,6 +631,7 @@ export default function MyRoutesScreen() {
 
       <PathBoardViewer
         context="OWNER"
+        boardConf={selected?.boardConf}
         visible={!!selected}
         path={selected?.path || []}
         pathName={selected?.title || "Route"}
@@ -501,7 +652,9 @@ export default function MyRoutesScreen() {
         title={tab === "CREATED" ? "Delete route?" : "Remove route?"}
         message={
           pendingDelete
-            ? `This will ${tab === "CREATED" ? "permanently delete" : "remove"} "${pendingDelete.title}".`
+            ? `This will ${
+                tab === "CREATED" ? "permanently delete" : "remove"
+              } "${pendingDelete.title}".`
             : ""
         }
         confirmLabel={tab === "CREATED" ? "DELETE" : "REMOVE"}
@@ -516,63 +669,84 @@ export default function MyRoutesScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
+  emptyWrap: {
+    marginTop: 10,
+  },
+
   emptyBtn: {
     marginTop: 10,
-    borderRadius: 16,
     paddingVertical: 12,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#111111",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#111111",
   },
-  emptyBtnText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1.2 },
 
-  footer: { paddingVertical: 16, alignItems: "center", gap: 10 },
-  footerText: { color: "rgba(255,255,255,0.75)", fontWeight: "800" },
-  footerMuted: { color: "rgba(255,255,255,0.55)", fontWeight: "800" },
-});
+  emptyBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
 
-const x = StyleSheet.create({
+  footer: {
+    alignItems: "center",
+    gap: 10,
+  },
+
+  footerText: {
+    color: "#444444",
+    fontWeight: "600",
+  },
+
+  footerMuted: {
+    color: "#7A7A7A",
+    fontWeight: "500",
+  },
+
   modeBar: {
     marginTop: 10,
     marginBottom: 6,
     marginHorizontal: 2,
-    padding: 12,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#F7F7F7",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderRadius: 18,
   },
+
   modeLabel: {
-    color: "rgba(255,255,255,0.65)",
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    fontSize: 12,
+    color: "#6B6B6B",
+    fontWeight: "700",
+    letterSpacing: 0.8,
   },
+
   modeToggle: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.20)",
+    backgroundColor: "#EDEDED",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
+
   modeToggleOn: {
-    borderColor: "rgba(122,162,255,0.45)",
-    backgroundColor: "rgba(122,162,255,0.14)",
+    borderColor: "#111111",
+    backgroundColor: "#111111",
   },
+
   modeToggleText: {
-    color: "#EAF0FF",
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    fontSize: 12,
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+
+  modeToggleTextOn: {
+    color: "#FFFFFF",
   },
 
   checkBox: {
@@ -580,18 +754,20 @@ const x = StyleSheet.create({
     height: 22,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "#D0D0D0",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
+
   checkBoxOn: {
-    backgroundColor: "rgba(122,162,255,0.25)",
-    borderColor: "rgba(122,162,255,0.55)",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FFFFFF",
   },
+
   checkMark: {
-    color: "#EAF0FF",
-    fontWeight: "900",
+    color: "#111111",
+    fontWeight: "700",
     fontSize: 14,
     lineHeight: 16,
   },
@@ -602,36 +778,51 @@ const x = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 6,
   },
+
   editBtn: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 16,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#EDEDED",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
-  editBtnText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1.1 },
+
+  editBtnText: {
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
 
   leaderBtn: {
     flex: 1.2,
     paddingVertical: 12,
-    borderRadius: 16,
     alignItems: "center",
     borderWidth: 1,
   },
+
   leaderBtnOn: {
-    backgroundColor: "rgba(122,162,255,0.18)",
-    borderColor: "rgba(122,162,255,0.40)",
+    backgroundColor: "#111111",
+    borderColor: "#111111",
   },
+
   leaderBtnOff: {
-    backgroundColor: "rgba(255,92,122,0.10)",
-    borderColor: "rgba(255,92,122,0.35)",
+    backgroundColor: "rgba(225,85,114,0.08)",
+    borderColor: "rgba(225,85,114,0.28)",
   },
+
   leaderBtnText: {
-    color: "#EAF0FF",
-    fontWeight: "900",
-    letterSpacing: 1.0,
-    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textAlign: "center",
+    paddingHorizontal: 6,
+  },
+
+  leaderBtnTextOn: {
+    color: "#FFFFFF",
+  },
+
+  leaderBtnTextOff: {
+    color: "#C44760",
   },
 });

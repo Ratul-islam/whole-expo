@@ -7,6 +7,7 @@ import { tokenStorage } from "@/src/lib/tokenStorage";
 export type SessionStatus =
   | "starting"
   | "preset_loaded"
+  | "paused"
   | "in_game"
   | "completed"
   | "abandoned";
@@ -15,9 +16,11 @@ export type LiveSessionDoc = {
   _id: string;
   sessionId: string;
   userId: string;
+  control:string;
   deviceId: string;
   deviceSecret: string;
   status: SessionStatus;
+  time:number;
   score: number;
   correct: number;
   wrong: number;
@@ -42,7 +45,6 @@ function httpToWs(url: string) {
   return url.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
 }
 
-/** dev helper: prevents accidental in-place mutations */
 function deepFreeze<T>(obj: T): T {
   if (!obj || typeof obj !== "object") return obj;
   Object.freeze(obj);
@@ -80,7 +82,9 @@ function normalizeDeviceStatus(res: any): DeviceStatusDoc | null {
           deviceSecret: String(s.deviceSecret ?? ""),
           status: (s.status ?? "starting") as SessionStatus,
           score: Number(s.score ?? 0),
+          control: s.control,
           correct: Number(s.correct ?? 0),
+          time: Number(s.time?? 0),
           wrong: Number(s.wrong ?? 0),
           startedAt: s.startedAt ? String(s.startedAt) : undefined,
           createdAt: s.createdAt ? String(s.createdAt) : undefined,
@@ -89,7 +93,6 @@ function normalizeDeviceStatus(res: any): DeviceStatusDoc | null {
       : null,
   };
 
-  // Freeze in dev so anything mutating it will throw / break early
   if (__DEV__) deepFreeze(out);
 
   return out;
@@ -111,10 +114,8 @@ export function useDeviceLive() {
   const [device, setDevice] = useState<DeviceStatusDoc | null>(null);
   const [wsOnline, setWsOnline] = useState(false);
 
-  // ✅ This increments on every device update, guaranteeing screen rerenders
   const [deviceRev, setDeviceRev] = useState(0);
 
-  // ✅ extra render kick (if something weird blocks rerenders)
   const [renderTick, setRenderTick] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -210,7 +211,6 @@ export function useDeviceLive() {
       return;
     }
 
-    // Close previous before opening
     try {
       wsRef.current?.close();
     } catch {}

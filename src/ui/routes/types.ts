@@ -6,6 +6,7 @@ export type PathDTO = {
   _id: string;
   userId: string;
   name: string;
+  boardConf: string;
   path: PathStep[];
   createdAt: string;
   updatedAt: string;
@@ -25,9 +26,10 @@ export type RouteCardModel = {
   id: string;
   title: string;
   steps: number;
+  boardConf: string;
   createdAt?: string;
   path: PathStep[];
   isPublic: boolean
 };
 
-export type ConnectedDevice = { deviceId: string; deviceSecret: string } | null;
+export type ConnectedDevice = { deviceId: string; deviceSecret: string, boardConf:string, sessionId:string } | null;

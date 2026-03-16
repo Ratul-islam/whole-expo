@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Allow this app to access your camera to scan the device QR code."
-      }
+      },
+      "bundleIdentifier": "com.ratul404.frontend"
     },
     "android": {
       "permissions": [
@@ -33,6 +34,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",

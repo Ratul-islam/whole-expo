@@ -1,7 +1,7 @@
 // src/device/device.services.ts
 import { api } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
-import { loadPresetType } from "./device.types";
+import { loadPresetType, statusUpdateType } from "./device.types";
 
 type LiveHandlers = {
   onOpen?: () => void;
@@ -15,7 +15,6 @@ function httpToWs(url: string) {
 }
 
 function getWsBaseUrl(): string {
-  // axios baseURL (e.g. http://192.168.0.115:8000)
   // @ts-ignore
   const baseURL: string = api?.defaults?.baseURL ?? "";
   if (!baseURL) throw new Error("api.defaults.baseURL is not set");
@@ -29,6 +28,18 @@ export const deviceService = {
   },
   loadPreset:async (payload:loadPresetType)=>{
     const { data } = await api.post(ENDPOINTS.DEVICE.LOADPRST,payload );
+    return data;
+  },
+  startGame:async (payload:statusUpdateType)=>{
+    const { data } = await api.post(ENDPOINTS.DEVICE.STARTGAME,payload );
+    return data;
+  },
+  pauseGame:async (payload:statusUpdateType)=>{
+    const { data } = await api.post(ENDPOINTS.DEVICE.PAUSEGAME,payload );
+    return data;
+  },
+  resumeGame:async (payload:statusUpdateType)=>{
+    const { data } = await api.post(ENDPOINTS.DEVICE.RESUMEGAME,payload );
     return data;
   },
   live: (token: string, handlers: LiveHandlers = {}) => {

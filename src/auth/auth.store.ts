@@ -40,10 +40,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   login: async (email, password) => {
-    // authService.login already saves tokens in tokenStorage
     await authService.login({ email, password });
 
-    // always fetch real user object
     const meRes = await authService.me();
     const user = meRes?.data ?? meRes;
 
@@ -51,7 +49,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    await authService.logout(); // clears tokenStorage
+    await authService.logout(); 
     set({ isAuthed: false, user: null, isBooting: false });
   },
 }));

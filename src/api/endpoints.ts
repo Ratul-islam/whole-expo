@@ -4,6 +4,7 @@ export const ENDPOINTS = {
     REFRESH: "/auth/refresh",
     LOGOUT: "/auth/logout",
     ME:"/auth/me",
+    EXISTS:"/auth/exists",
     REGISTER: "/auth/register",
     VERIFY_EMAIL: "/auth/verify",
     FORGOT_PASSWORD: "/auth/forgot-password",
@@ -15,6 +16,7 @@ export const ENDPOINTS = {
   PATH:{
     NEW: "/path",
     UPDATE: "/path",
+    PATHDETAILS: "/path",
     DELETE: "/path",
     ALLPATH: "/path",
     SAVEPATH: "/path/saved",
@@ -30,6 +32,9 @@ export const ENDPOINTS = {
   DEVICE:{
     STATUS: "/device/connected",
     LOADPRST: "/device/load-path",
+    STARTGAME: "/device/start-game",
+    PAUSEGAME: "/device/pause-game",
+    RESUMEGAME: "/device/resume-game",
     LIVE: "/device/live"
   },
   USER: {

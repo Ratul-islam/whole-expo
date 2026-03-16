@@ -15,9 +15,16 @@ export function MainHeader({
         <Text style={ui.subtitle}>Dashboard</Text>
       </View>
 
-      <View style={{ alignItems: "flex-end" }}>
+      <View style={ui.right}>
         <Text style={ui.miniTag}>{deviceText}</Text>
-        <Pressable onPress={onLogout} style={ui.logoutBtn}>
+
+        <Pressable
+          onPress={onLogout}
+          style={({ pressed }) => [
+            ui.logoutBtn,
+            { opacity: pressed ? 0.8 : 1 },
+          ]}
+        >
           <Text style={ui.logoutText}>Logout</Text>
         </Pressable>
       </View>
@@ -28,36 +35,49 @@ export function MainHeader({
 const ui = StyleSheet.create({
   headerRow: {
     marginTop: 6,
-    paddingHorizontal: 2,
+    marginBottom: 18,
     flexDirection: "row",
-    alignItems: "flex-start",
     justifyContent: "space-between",
+    alignItems: "flex-start",
   },
+
   brand: {
-    color: "#EAF0FF",
+    color: "#111111",
     fontWeight: "900",
     fontSize: 22,
-    letterSpacing: 1.5,
+    letterSpacing: 1,
   },
+
   subtitle: {
-    color: "rgba(255,255,255,0.65)",
-    fontWeight: "800",
+    color: "#6B6B6B",
+    fontWeight: "600",
     marginTop: 2,
   },
-  miniTag: {
-    color: "rgba(255,255,255,0.65)",
-    fontWeight: "900",
-    letterSpacing: 0.8,
-    fontSize: 12,
+
+  right: {
+    alignItems: "flex-end",
   },
+
+  miniTag: {
+    color: "#8A8A8A",
+    fontWeight: "700",
+    fontSize: 12,
+    letterSpacing: 0.8,
+  },
+
   logoutBtn: {
     marginTop: 8,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "#EDEDED",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
-  logoutText: { color: "#EAF0FF", fontWeight: "900" },
+
+  logoutText: {
+    color: "#111111",
+    fontWeight: "700",
+    fontSize: 14,
+  },
 });

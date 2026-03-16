@@ -1,36 +1,50 @@
 import React from "react";
-import { View, Text, Pressable, TextInput, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  TextInput,
+  StyleSheet,
+  useWindowDimensions,
+} from "react-native";
 import type { ConnectedDevice, Tab } from "./types";
 import { DevicePill } from "./DevicePill";
 
 export function RoutesHeader(props: {
   tab: Tab;
   setTab: (t: Tab) => void;
-
   query: string;
   setQuery: (q: string) => void;
-
   onBack: () => void;
   onCreate: () => void;
-
   device: ConnectedDevice;
-
   errorText: string | null;
   onRetry: () => void;
 }) {
   const { tab, setTab, query, setQuery, onBack, onCreate, device, errorText, onRetry } = props;
 
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
+
+  const ui = {
+    title: isTablet ? 22 : 20,
+    subtitle: isTablet ? 14 : 13,
+    padding: isTablet ? 14 : 12,
+  };
+
   return (
     <View>
-      {/* Top bar (UNCHANGED) */}
+      {/* Top Bar */}
       <View style={s.topBar}>
         <Pressable onPress={onBack} style={s.backBtn}>
           <Text style={s.backIcon}>←</Text>
         </Pressable>
 
         <View style={{ flex: 1 }}>
-          <Text style={s.hTitle}>My Routes</Text>
-          <Text style={s.hSub}>Keep your presets ready for battle</Text>
+          <Text style={[s.hTitle, { fontSize: ui.title }]}>My Routes</Text>
+          <Text style={[s.hSub, { fontSize: ui.subtitle }]}>
+            Keep your presets ready for battle
+          </Text>
         </View>
 
         <Pressable onPress={onCreate} style={s.hBtn}>
@@ -38,48 +52,52 @@ export function RoutesHeader(props: {
         </Pressable>
       </View>
 
-      {/* Panel (same design, just add tab row) */}
-      <View style={s.panel}>
+      {/* Panel */}
+      <View style={[s.panel, { padding: ui.padding }]}>
         <View style={s.panelTop}>
-          {/* ✅ NEW: Saved/Created tabs, inserted here */}
+          {/* Tabs */}
           <View style={s.tabRow}>
             <Pressable
               onPress={() => setTab("CREATED")}
               style={[s.tabBtn, tab === "CREATED" && s.tabBtnActive]}
             >
-              <Text style={[s.tabText, tab === "CREATED" && s.tabTextActive]}>Created</Text>
+              <Text style={[s.tabText, tab === "CREATED" && s.tabTextActive]}>
+                Created
+              </Text>
             </Pressable>
 
             <Pressable
               onPress={() => setTab("SAVED")}
               style={[s.tabBtn, tab === "SAVED" && s.tabBtnActive]}
             >
-              <Text style={[s.tabText, tab === "SAVED" && s.tabTextActive]}>Saved</Text>
+              <Text style={[s.tabText, tab === "SAVED" && s.tabTextActive]}>
+                Saved
+              </Text>
             </Pressable>
           </View>
 
-          {/* Device pill (UNCHANGED) */}
           <DevicePill device={device} />
         </View>
 
-        {/* Search row (UNCHANGED) */}
+        {/* Search */}
         <View style={s.searchRow}>
           <Text style={s.searchIcon}>⌕</Text>
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search routes…"
-            placeholderTextColor="rgba(255,255,255,0.35)"
+            placeholderTextColor="#A5A5A5"
             style={s.search}
           />
         </View>
 
-        {/* Error row (UNCHANGED) */}
+        {/* Error */}
         {!!errorText && (
           <View style={s.errorRow}>
             <Text style={s.errorText} numberOfLines={2}>
               {errorText}
             </Text>
+
             <Pressable onPress={onRetry} style={s.retryBtn}>
               <Text style={s.retryText}>Retry</Text>
             </Pressable>
@@ -97,38 +115,54 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#EDEDED",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "#D9D9D9",
   },
-  backIcon: { color: "#EAF0FF", fontWeight: "900", fontSize: 16 },
 
-  hTitle: { color: "#EAF0FF", fontSize: 20, fontWeight: "900", letterSpacing: 0.6 },
-  hSub: { marginTop: 4, color: "rgba(255,255,255,0.65)", fontWeight: "700" },
+  backIcon: {
+    color: "#111111",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  hTitle: {
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+
+  hSub: {
+    marginTop: 3,
+    color: "#6B6B6B",
+    fontWeight: "500",
+  },
 
   hBtn: {
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 14,
-    backgroundColor: "rgba(122,162,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(122,162,255,0.26)",
+    backgroundColor: "#111111",
   },
-  hBtnText: { color: "#EAF0FF", fontWeight: "900" },
+
+  hBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
 
   panel: {
     marginTop: 12,
     borderRadius: 18,
-    padding: 12,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#F7F7F7",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "#D9D9D9",
   },
 
   panelTop: {
@@ -137,32 +171,35 @@ const s = StyleSheet.create({
     gap: 10,
   },
 
-  /* ✅ NEW: tab row, styled to match your old panel */
   tabRow: {
     flex: 1,
     flexDirection: "row",
     gap: 10,
   },
+
   tabBtn: {
     flex: 1,
     height: 40,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "#EFEFEF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
+
   tabBtnActive: {
-    backgroundColor: "rgba(122,162,255,0.16)",
-    borderColor: "rgba(122,162,255,0.30)",
+    backgroundColor: "#111111",
+    borderColor: "#111111",
   },
+
   tabText: {
-    color: "rgba(255,255,255,0.70)",
-    fontWeight: "900",
+    color: "#444444",
+    fontWeight: "600",
   },
+
   tabTextActive: {
-    color: "#EAF0FF",
+    color: "#FFFFFF",
   },
 
   searchRow: {
@@ -173,32 +210,50 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
-  searchIcon: { color: "rgba(255,255,255,0.55)", fontWeight: "900" },
-  search: { flex: 1, color: "#fff", fontWeight: "700", paddingVertical: 0 },
+
+  searchIcon: {
+    color: "#8A8A8A",
+    fontWeight: "700",
+  },
+
+  search: {
+    flex: 1,
+    color: "#111111",
+    fontWeight: "500",
+    paddingVertical: 0,
+  },
 
   errorRow: {
     marginTop: 10,
     borderRadius: 14,
     padding: 10,
-    backgroundColor: "rgba(255,80,80,0.10)",
+    backgroundColor: "rgba(225,85,114,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,80,80,0.22)",
+    borderColor: "rgba(225,85,114,0.25)",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  errorText: { flex: 1, color: "#FFD6DE", fontWeight: "800" },
+
+  errorText: {
+    flex: 1,
+    color: "#C44760",
+    fontWeight: "600",
+  },
+
   retryBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "#111111",
   },
-  retryText: { color: "#fff", fontWeight: "900" },
+
+  retryText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+  },
 });

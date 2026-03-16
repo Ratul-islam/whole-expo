@@ -1,12 +1,16 @@
 import { api } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 
-type LeaderboardQuery = {
+export type LeaderboardType = "games" | "path";
+
+export type LeaderboardQuery = {
   page?: number;
   limit?: number;
+  type?: LeaderboardType;
+  boardConf: string;
 };
 
-type LeaderboardItem = {
+export type GamesLeaderboardItem = {
   userId: string;
   username: string;
   totalScore: number;
@@ -17,50 +21,66 @@ type LeaderboardItem = {
   rank: number;
 };
 
-type LeaderboardResponse = {
+export type LeaderboardMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+};
+
+export type GamesLeaderboardResponse = {
   status: "success" | "error";
   message: string;
-  data: LeaderboardItem[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
+  data: GamesLeaderboardItem[];
+  meta: LeaderboardMeta;
 };
+
+
+export type PathLeaderboardItem = {
+  pathId: string; 
+  name?: string;
+  plays: number;
+  completed?: number;
+  abandoned?: number;
+  lastPlayedAt?: string | null;
+  rank: number;
+};
+
+export type PathLeaderboardResponse = {
+  status: "success" | "error";
+  message: string;
+  data: PathLeaderboardItem[];
+  meta: LeaderboardMeta;
+};
+
+export type LeaderboardResponse = GamesLeaderboardResponse | PathLeaderboardResponse;
 
 export const sessionService = {
   start: async (payload: any) => {
-    const { data } = await api.post(
-      ENDPOINTS.SESSION.START,
-      payload
-    );
+    const { data } = await api.post(ENDPOINTS.SESSION.START, payload);
     return data;
   },
 
   getCompletedSessions: async () => {
-    const { data } = await api.get(
-      ENDPOINTS.SESSION.COMPLETEDSESSION
-    );
+    const { data } = await api.get(ENDPOINTS.SESSION.COMPLETEDSESSION);
     return data;
   },
 
+  
   getLeaderboard: async ({
     page = 1,
     limit = 10,
-  }: LeaderboardQuery = {}): Promise<LeaderboardResponse> => {
+    boardConf,
+    type = "games",
+  }: LeaderboardQuery): Promise<LeaderboardResponse> => {
     const { data } = await api.get<LeaderboardResponse>(
       ENDPOINTS.SESSION.LEADERBOARD,
       {
-        params: {
-          page,
-          limit,
-        },
+        params: { page, limit, type, boardConf },
       }
     );
-
     return data;
   },
 };

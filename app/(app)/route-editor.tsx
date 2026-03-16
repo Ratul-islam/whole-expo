@@ -8,6 +8,8 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  useWindowDimensions,
+  ScrollView,
 } from "react-native";
 import { pathService } from "@/src/path/path.services";
 import { PathBoard, type PathStep } from "@/src/ui/routes/pathBoard";
@@ -18,17 +20,41 @@ type EditRouteDTO = {
   name: string;
   path: PathStep[];
   isPublic?: boolean;
+  boardConf?: string | number;
 };
+
+type BoardPreset = {
+  label: string;
+  value: "10" | "20";
+};
+
+const BOARD_PRESETS: BoardPreset[] = [
+  { label: "NextPeg Lite", value: "10" },
+  { label: "NextPeg", value: "20" },
+];
+
+function normalizeBoardConf(value?: string | number): "10" | "20" {
+  const v = String(value ?? "").trim().toLowerCase();
+
+  if (v === "10" || v === "2x5" || v.includes("lite")) return "10";
+  if (v === "20" || v === "4x5" || v.includes("nextpeg") || v.includes("full")) return "20";
+
+  return "20";
+}
 
 export default function RouteEditorVisualScreen() {
   const params = useLocalSearchParams<{ pathId?: string }>();
   const pathId = typeof params?.pathId === "string" ? params.pathId : undefined;
-
   const isEdit = !!pathId;
+
+  const { width } = useWindowDimensions();
+  const isSmallPhone = width < 360;
+  const isTablet = width >= 768;
 
   const [name, setName] = useState("");
   const [path, setPath] = useState<PathStep[]>([]);
   const [isPublic, setIsPublic] = useState(false);
+  const [boardConf, setBoardConf] = useState<"10" | "20">("20");
 
   const [bootLoading, setBootLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -38,7 +64,7 @@ export default function RouteEditorVisualScreen() {
   const summary = useMemo(() => {
     if (!stepsCount) return "No steps yet.";
     const last = path[path.length - 1];
-    return `Last: ${last[0]}${last[1] === 0 ? "L" : "R"} • Total: ${stepsCount}`;
+    return `Last: ${last[0] + 1}${last[1] === 0 ? "L" : "R"} • Total: ${stepsCount}`;
   }, [path, stepsCount]);
 
   useEffect(() => {
@@ -49,11 +75,18 @@ export default function RouteEditorVisualScreen() {
         setBootLoading(true);
 
         const res = await pathService.getAllPath();
+        const raw = (res as any)?.data ?? (res as any) ?? [];
+        const list = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.list)
+          ? raw.list
+          : Array.isArray(raw?.data)
+          ? raw.data
+          : [];
 
-        const list = (res as any)?.data ?? (res as any) ?? [];
-        const found: EditRouteDTO | undefined = Array.isArray(list)
-          ? list.find((x: any) => String(x?._id) === String(pathId))
-          : undefined;
+        const found: EditRouteDTO | undefined = list.find(
+          (x: any) => String(x?._id ?? x?.id) === String(pathId)
+        );
 
         if (!found) {
           Alert.alert("Not found", "Could not find this route.");
@@ -62,8 +95,9 @@ export default function RouteEditorVisualScreen() {
         }
 
         setName(found.name ?? "");
-        setPath((found.path ?? []) as any);
+        setPath((found.path ?? []) as PathStep[]);
         setIsPublic(!!found.isPublic);
+        setBoardConf(normalizeBoardConf(found.boardConf));
       } catch (e: any) {
         Alert.alert("Error", e?.message || "Failed to load route.");
         router.back();
@@ -75,12 +109,20 @@ export default function RouteEditorVisualScreen() {
     load();
   }, [isEdit, pathId]);
 
+  const onSelectBoard = (next: "10" | "20") => {
+    if (next === boardConf) return;
+    setBoardConf(next);
+    setPath([]);
+  };
+
   const onSave = async () => {
     const trimmed = name.trim();
+
     if (!trimmed) {
       Alert.alert("Name required", "Give this route a name.");
       return;
     }
+
     if (!path.length) {
       Alert.alert("Empty route", "Tap nodes to build a route first.");
       return;
@@ -95,6 +137,7 @@ export default function RouteEditorVisualScreen() {
           name: trimmed,
           path,
           isPublic,
+          boardConf,
         });
 
         Alert.alert("Updated", "Route updated successfully.", [
@@ -103,7 +146,12 @@ export default function RouteEditorVisualScreen() {
         return;
       }
 
-      await pathService.addNewPath({ name: trimmed, path, isPublic } as any);
+      await pathService.addNewPath({
+        name: trimmed,
+        path,
+        isPublic,
+        boardConf,
+      } as any);
 
       Alert.alert("Saved", "Route saved successfully.", [
         { text: "OK", onPress: () => router.push("/(app)/my-routes") },
@@ -119,9 +167,13 @@ export default function RouteEditorVisualScreen() {
     <ScreenLayout title="" subtitle="">
       <View style={ui.header}>
         <View style={{ flex: 1 }}>
-          <Text style={ui.brand}>ROUTE FORGE</Text>
+          <Text style={[ui.brand, { fontSize: isTablet ? 24 : 22 }]}>
+            Route Forge
+          </Text>
           <Text style={ui.subtitle}>
-            {isEdit ? "Edit your route and republish it." : "Build a sequence like a combo."}
+            {isEdit
+              ? "Edit your route and update it."
+              : "Build a sequence and save it."}
           </Text>
         </View>
 
@@ -137,6 +189,7 @@ export default function RouteEditorVisualScreen() {
           <Text style={ui.saveText}>{isEdit ? "UPDATE" : "SAVE"}</Text>
         </Pressable>
       </View>
+      <ScrollView>
 
       <View style={ui.panel}>
         <View style={ui.panelTopRow}>
@@ -146,7 +199,7 @@ export default function RouteEditorVisualScreen() {
               value={name}
               onChangeText={setName}
               placeholder="e.g. Warmup L/R"
-              placeholderTextColor="rgba(255,255,255,0.35)"
+              placeholderTextColor="#A5A5A5"
               style={ui.input}
             />
           </View>
@@ -173,9 +226,49 @@ export default function RouteEditorVisualScreen() {
           <View style={ui.hudPill}>
             <Text style={ui.hudKey}>STATUS</Text>
             <Text style={ui.hudVal}>
-              {bootLoading ? "LOADING" : stepsCount ? (isEdit ? "EDITING" : "BUILDING") : "IDLE"}
+              {bootLoading
+                ? "LOADING"
+                : stepsCount
+                ? isEdit
+                  ? "EDITING"
+                  : "BUILDING"
+                : "IDLE"}
             </Text>
           </View>
+        </View>
+
+        <View style={ui.boardRow}>
+          <Text style={ui.label}>BOARD TYPE</Text>
+
+          <View style={ui.boardPills}>
+            {BOARD_PRESETS.map((preset) => {
+              const active = preset.value === boardConf;
+
+              return (
+                <Pressable
+                  key={preset.value}
+                  onPress={() => onSelectBoard(preset.value)}
+                  disabled={saving || bootLoading}
+                  style={({ pressed }) => [
+                    ui.boardPill,
+                    active && ui.boardPillOn,
+                    pressed && { opacity: 0.9 },
+                    (saving || bootLoading) && { opacity: 0.6 },
+                  ]}
+                >
+                  <Text
+                    style={[ui.boardPillText, active && ui.boardPillTextOn]}
+                  >
+                    {preset.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={ui.boardHint}>
+            Switching board type will clear the current route.
+          </Text>
         </View>
 
         <Pressable
@@ -203,7 +296,9 @@ export default function RouteEditorVisualScreen() {
           </View>
 
           <View style={[ui.badge, isPublic ? ui.badgeOn : ui.badgeOff]}>
-            <Text style={ui.badgeText}>{isPublic ? "PUBLIC" : "PRIVATE"}</Text>
+            <Text style={[ui.badgeText, isPublic ? ui.badgeTextOn : ui.badgeTextOff]}>
+              {isPublic ? "PUBLIC" : "PRIVATE"}
+            </Text>
           </View>
         </Pressable>
 
@@ -211,28 +306,28 @@ export default function RouteEditorVisualScreen() {
 
         {bootLoading ? (
           <View style={ui.loadingRow}>
-            <ActivityIndicator />
+            <ActivityIndicator color="#111111" />
             <Text style={ui.loadingText}>Loading route…</Text>
           </View>
         ) : null}
       </View>
 
       <PathBoard
-        rows={4}
-        cols={5}
+        boardConf={boardConf}
         path={path}
         onChangePath={setPath}
         title="BOARD"
-        hint="Tap a node → add Left/Right. Repeat nodes allowed."
-        allowMultiple={true}
-      />
+        hint="Tap a hold → add Left/Right. Repeat holds allowed."
+        allowMultiple
+        />
 
       <View style={ui.footer}>
         <Text style={ui.footerTitle}>TIP</Text>
         <Text style={ui.footerHint}>
-          You can reuse the same node multiple times to create patterns.
+          You can reuse the same hold multiple times to create patterns.
         </Text>
       </View>
+        </ScrollView>
     </ScreenLayout>
   );
 }
@@ -245,54 +340,60 @@ const ui = StyleSheet.create({
     alignItems: "flex-start",
     gap: 12,
   },
+
   brand: {
-    color: "#EAF0FF",
-    fontWeight: "900",
-    fontSize: 22,
-    letterSpacing: 1.6,
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
+
   subtitle: {
     marginTop: 4,
-    color: "rgba(255,255,255,0.65)",
-    fontWeight: "800",
+    color: "#6B6B6B",
+    fontWeight: "500",
   },
 
   saveBtn: {
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 16,
-    backgroundColor: "rgba(122,162,255,0.18)",
+    backgroundColor: "#111111",
     borderWidth: 1,
-    borderColor: "rgba(122,162,255,0.40)",
+    borderColor: "#111111",
   },
-  saveText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1.2 },
+
+  saveText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
 
   panel: {
     marginTop: 14,
     borderRadius: 22,
     padding: 14,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#F7F7F7",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
+    borderColor: "#D9D9D9",
   },
 
   label: {
-    color: "rgba(255,255,255,0.60)",
-    fontWeight: "900",
-    letterSpacing: 1.1,
+    color: "#6B6B6B",
+    fontWeight: "700",
+    letterSpacing: 0.8,
     fontSize: 12,
   },
 
   input: {
     marginTop: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-    color: "#EAF0FF",
+    borderColor: "#D9D9D9",
+    backgroundColor: "#FFFFFF",
+    color: "#111111",
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontWeight: "800",
+    fontWeight: "600",
   },
 
   hudRow: {
@@ -301,101 +402,224 @@ const ui = StyleSheet.create({
     gap: 10,
     alignItems: "center",
   },
+
   hudPill: {
     flex: 1,
     borderRadius: 16,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: "rgba(0,0,0,0.20)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#E3E3E3",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+
   hudKey: {
-    color: "rgba(255,255,255,0.65)",
-    fontWeight: "900",
-    letterSpacing: 1.0,
+    color: "#7A7A7A",
+    fontWeight: "700",
+    letterSpacing: 0.8,
     fontSize: 11,
   },
-  hudVal: { color: "#EAF0FF", fontWeight: "900", fontSize: 14 },
+
+  hudVal: {
+    color: "#111111",
+    fontWeight: "700",
+    fontSize: 14,
+  },
 
   clearBtn: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: "rgba(255,92,122,0.10)",
+    backgroundColor: "rgba(225,85,114,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,92,122,0.35)",
+    borderColor: "rgba(225,85,114,0.28)",
   },
-  clearText: { color: "#FFD6DE", fontWeight: "900", letterSpacing: 1.1, fontSize: 12 },
+
+  clearText: {
+    color: "#C44760",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    fontSize: 12,
+  },
 
   summary: {
     marginTop: 10,
-    color: "rgba(255,255,255,0.70)",
-    fontWeight: "800",
+    color: "#444444",
+    fontWeight: "600",
   },
 
   footer: {
     marginTop: 14,
+    marginBottom:40,
     borderRadius: 18,
     padding: 14,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: "#F7F7F7",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
+    borderColor: "#E3E3E3",
   },
-  footerTitle: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1.2 },
-  footerHint: { marginTop: 6, color: "rgba(255,255,255,0.65)", fontWeight: "800" },
 
-  panelTopRow: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
+  footerTitle: {
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+
+  footerHint: {
+    marginTop: 6,
+    color: "#6B6B6B",
+    fontWeight: "500",
+  },
+
+  panelTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+  },
 
   toggleRow: {
     marginTop: 12,
     borderRadius: 18,
     paddingVertical: 12,
     paddingHorizontal: 12,
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#E3E3E3",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
 
-  toggleLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  toggleLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
 
   checkBox: {
     width: 22,
     height: 22,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "#D0D0D0",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
 
   checkBoxOn: {
-    backgroundColor: "rgba(122,162,255,0.25)",
-    borderColor: "rgba(122,162,255,0.55)",
+    backgroundColor: "#111111",
+    borderColor: "#111111",
   },
 
-  checkMark: { color: "#EAF0FF", fontWeight: "900", fontSize: 14, lineHeight: 16 },
+  checkMark: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
+    lineHeight: 16,
+  },
 
-  toggleTitle: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 0.6 },
+  toggleTitle: {
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
 
-  toggleHint: { marginTop: 3, color: "rgba(255,255,255,0.65)", fontWeight: "800", fontSize: 12 },
+  toggleHint: {
+    marginTop: 3,
+    color: "#6B6B6B",
+    fontWeight: "500",
+    fontSize: 12,
+  },
 
-  badge: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 14, borderWidth: 1 },
+  badge: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
 
-  badgeOn: { backgroundColor: "rgba(122,162,255,0.18)", borderColor: "rgba(122,162,255,0.40)" },
+  badgeOn: {
+    backgroundColor: "#111111",
+    borderColor: "#111111",
+  },
 
-  badgeOff: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "rgba(255,255,255,0.12)" },
+  badgeOff: {
+    backgroundColor: "#EDEDED",
+    borderColor: "#D9D9D9",
+  },
 
-  badgeText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1.1, fontSize: 11 },
+  badgeText: {
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    fontSize: 11,
+  },
 
-  loadingRow: { marginTop: 12, flexDirection: "row", alignItems: "center", gap: 10 },
-  loadingText: { color: "rgba(255,255,255,0.70)", fontWeight: "800" },
+  badgeTextOn: {
+    color: "#FFFFFF",
+  },
+
+  badgeTextOff: {
+    color: "#444444",
+  },
+
+  loadingRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  loadingText: {
+    color: "#6B6B6B",
+    fontWeight: "500",
+  },
+
+  boardRow: {
+    marginTop: 12,
+    gap: 10,
+  },
+
+  boardPills: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  boardPill: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#D9D9D9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  boardPillOn: {
+    backgroundColor: "#111111",
+    borderColor: "#111111",
+  },
+
+  boardPillText: {
+    color: "#444444",
+    fontWeight: "700",
+    letterSpacing: 0.6,
+  },
+
+  boardPillTextOn: {
+    color: "#FFFFFF",
+  },
+
+  boardHint: {
+    marginTop: 2,
+    color: "#7A7A7A",
+    fontWeight: "500",
+    fontSize: 12,
+  },
 });

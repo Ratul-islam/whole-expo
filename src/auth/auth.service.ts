@@ -13,6 +13,7 @@ import {
   ForgotPasswordResponse,
   ResetPasswordRequest,
   ResetPasswordResponse,
+  checkRequest,
 } from "./auth.types";
 import { tokenStorage } from "../lib/tokenStorage";
 
@@ -35,6 +36,10 @@ export const authService = {
   /* ---------------- REGISTER ---------------- */
   register: async (payload: RegisterRequest) => {
     const { data } = await api.post<RegisterResponse>(ENDPOINTS.AUTH.REGISTER, payload);
+    return data;
+  },
+  exists: async (payload: checkRequest) => {
+    const { data } = await api.post<RegisterResponse>(ENDPOINTS.AUTH.EXISTS, payload);
     return data;
   },
 

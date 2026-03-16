@@ -1,3 +1,7 @@
 export type loadPresetType ={
-    deviceId:string, deviceSecret:string, pathId:string
+    id:string ,pathId:string|undefined
+}
+
+export type statusUpdateType ={
+    deviceId:string | undefined, deviceSecret:string|undefined
 }

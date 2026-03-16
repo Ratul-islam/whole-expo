@@ -1,66 +1,58 @@
 import React, { useMemo, useRef, useEffect } from "react";
-import { View, Text, StyleSheet, Pressable, Animated, Easing } from "react-native";
-
-export type DevicePhase =
-  | "DISCONNECTED"
-  | "CONNECTED"
-  | "PRESET_LOADED"
-  | "IN_GAME"
-  | "COMPLETED"
-  | "ABANDONED";
-
-function phaseLabel(phase: DevicePhase) {
-  if (phase === "DISCONNECTED") return "DISCONNECTED";
-  if (phase === "CONNECTED") return "CONNECTED";
-  if (phase === "PRESET_LOADED") return "READY";
-  if (phase === "IN_GAME") return "IN GAME";
-  if (phase === "COMPLETED") return "COMPLETED";
-  if (phase === "ABANDONED") return "TIMED OUT";
-  return "CONNECTED";
-}
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Animated,
+  Easing,
+  useWindowDimensions,
+} from "react-native";
+import { DevicePhase, phaseLabel } from "./StatusOrb";
 
 function phaseHint(phase: DevicePhase) {
   if (phase === "DISCONNECTED") return "Scan device to connect.";
   if (phase === "CONNECTED") return "Load a route to start.";
+  if (phase === "PAUSED") return "Game is paused.";
   if (phase === "PRESET_LOADED") return "Hit Start on the board.";
   if (phase === "IN_GAME") return "Live score updating...";
   if (phase === "COMPLETED") return "Run ended. Pick a new route.";
-  if (phase === "ABANDONED") return "Run abandoned. Reconnect & try again.";
+  if (phase === "ABANDONED") return "Run abandoned. Reconnect and try again.";
   return "";
 }
 
 function primaryCtaText(phase: DevicePhase) {
   if (phase === "DISCONNECTED") return "SCAN DEVICE";
   if (phase === "CONNECTED") return "LOAD ROUTE";
-  if (phase === "PRESET_LOADED") return "LOAD ROUTE";
-  if (phase === "IN_GAME") return "VIEW ROUTES";
+  if (phase === "PAUSED") return "RESUME";
+  if (phase === "PRESET_LOADED") return "TAP TO START";
+  if (phase === "IN_GAME") return "TAP TO PAUSE";
   if (phase === "COMPLETED") return "PLAY AGAIN";
   if (phase === "ABANDONED") return "RECONNECT";
   return "CONTINUE";
 }
 
 function phaseAccent(phase: DevicePhase) {
-  if (phase === "DISCONNECTED") return ["#8A8FA3", "rgba(138,143,163,0.25)"] as const;
-  if (phase === "CONNECTED") return ["#7AA2FF", "rgba(122,162,255,0.28)"] as const;
-  if (phase === "PRESET_LOADED") return ["#41D79A", "rgba(65,215,154,0.25)"] as const;
-  if (phase === "IN_GAME") return ["#FFB020", "rgba(255,176,32,0.25)"] as const;
-  if (phase === "COMPLETED") return ["#B98CFF", "rgba(185,140,255,0.25)"] as const;
-  if (phase === "ABANDONED") return ["#FF5C7A", "rgba(255,92,122,0.25)"] as const;
-  return ["#7AA2FF", "rgba(122,162,255,0.28)"] as const;
+  if (phase === "DISCONNECTED") return ["#8A8A8A", "rgba(138,138,138,0.16)"] as const;
+  if (phase === "CONNECTED") return ["#5B8DEF", "rgba(91,141,239,0.14)"] as const;
+  if (phase === "PAUSED") return ["#7E8695", "rgba(126,134,149,0.14)"] as const;
+  if (phase === "PRESET_LOADED") return ["#91B508", "rgba(145,181,8,0.14)"] as const;
+  if (phase === "IN_GAME") return ["#E4A11B", "rgba(228,161,27,0.14)"] as const;
+  if (phase === "COMPLETED") return ["#9B72E8", "rgba(155,114,232,0.14)"] as const;
+  if (phase === "ABANDONED") return ["#E15572", "rgba(225,85,114,0.14)"] as const;
+  return ["#5B8DEF", "rgba(91,141,239,0.14)"] as const;
 }
 
 export function HudPanel(props: {
   phase: DevicePhase;
   connected: boolean;
   wsOnline: boolean;
-
+  control?: string;
   totalScore: number;
   liveScore: number | "—";
   lastPlayedText: string;
-
   liveCorrect: number;
   liveWrong: number;
-
   onPrimary: () => void;
   onRoutes: () => void;
   onLeaderboard: () => void;
@@ -70,6 +62,7 @@ export function HudPanel(props: {
     phase,
     connected,
     wsOnline,
+    control,
     totalScore,
     liveScore,
     lastPlayedText,
@@ -81,88 +74,162 @@ export function HudPanel(props: {
     onScan,
   } = props;
 
-  // ✅ always derived from latest props (no caching)
+  const { width } = useWindowDimensions();
+
+  const isSmallPhone = width < 360;
+  const isTabletLike = width >= 768;
+
+  const sizes = useMemo(
+    () => ({
+      panelRadius: isTabletLike ? 24 : 20,
+      panelPadding: isTabletLike ? 18 : isSmallPhone ? 12 : 14,
+      titleSize: isTabletLike ? 20 : 18,
+      hintSize: isTabletLike ? 14 : 13,
+      scoreValueSize: isTabletLike ? 26 : isSmallPhone ? 20 : 22,
+      scoreSmallSize: isTabletLike ? 14 : 12.5,
+      ctaTextSize: isTabletLike ? 17 : 15.5,
+      ctaSubTextSize: isTabletLike ? 13 : 12.5,
+      quickTextSize: isTabletLike ? 13 : 12,
+      pillTextSize: isTabletLike ? 12.5 : 11.5,
+      gap: isTabletLike ? 12 : 10,
+    }),
+    [isSmallPhone, isTabletLike]
+  );
+
   const hudTitle = useMemo(() => phaseLabel(phase), [phase]);
   const hudHint = useMemo(() => phaseHint(phase), [phase]);
   const ctaText = useMemo(() => primaryCtaText(phase), [phase]);
-
   const [accent, glow] = useMemo(() => phaseAccent(phase), [phase]);
 
-  // ✅ tiny pulsing glow just for game vibe; re-renders safe
   const pulse = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     pulse.setValue(0);
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, [pulse, phase]);
 
-  const glowOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.65] });
-  const glowScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.04] });
+  const glowOpacity = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.2, 0.45],
+  });
 
-  // ✅ Debug render proof (remove anytime)
-  useEffect(() => {
-    console.log("[HudPanel] props update", { phase, wsOnline, connected, liveScore, liveCorrect, liveWrong });
-  }, [phase, wsOnline, connected, liveScore, liveCorrect, liveWrong]);
+  const glowScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.04],
+  });
+
+  const isLive = wsOnline && connected;
+  const signalText = isLive ? "LIVE" : "NO SIGNAL";
+  const ctaSubText = connected
+    ? control === "offline"
+      ? "Load route from device manually"
+      : "Tap to continue"
+    : "Tap to scan QR";
 
   return (
-    <View style={ui.hud}>
-      <View style={ui.hudTop}>
-        <View>
-          <Text style={ui.hudTitle}>{hudTitle}</Text>
-          <Text style={ui.hudHint}>{hudHint}</Text>
+    <View
+      style={[
+        styles.hud,
+        {
+          borderRadius: sizes.panelRadius,
+          padding: sizes.panelPadding,
+        },
+      ]}
+    >
+      <View style={styles.hudTop}>
+        <View style={styles.titleWrap}>
+          <Text style={[styles.hudTitle, { fontSize: sizes.titleSize }]} numberOfLines={1}>
+            {hudTitle}
+          </Text>
+          <Text style={[styles.hudHint, { fontSize: sizes.hintSize }]}>{hudHint}</Text>
         </View>
 
-        <View style={ui.livePill}>
-          <View style={[ui.dot, { backgroundColor: wsOnline && connected ? "#41D79A" : "#FF5C7A" }]} />
-          <Text style={ui.livePillText}>{wsOnline && connected ? "LIVE" : "NO SIGNAL"}</Text>
+        <View style={styles.liveWrap}>
+          <View style={styles.livePill}>
+            <View
+              style={[
+                styles.dot,
+                { backgroundColor: isLive ? "#22A06B" : "#E15572" },
+              ]}
+            />
+            <Text style={[styles.livePillText, { fontSize: sizes.pillTextSize }]}>
+              {signalText}
+            </Text>
+          </View>
         </View>
       </View>
 
-      <View style={ui.scoreRow}>
-        <View style={ui.scoreCard}>
-          <Text style={ui.scoreLabel}>TOTAL</Text>
-          <Text style={ui.scoreValue}>{totalScore}</Text>
+      <View style={[styles.scoreRow, { gap: sizes.gap }]}>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreLabel}>TOTAL</Text>
+          <Text style={[styles.scoreValue, { fontSize: sizes.scoreValueSize }]}>
+            {totalScore}
+          </Text>
         </View>
 
-        <View style={ui.scoreCard}>
-          <Text style={ui.scoreLabel}>LIVE</Text>
-          <Text style={ui.scoreValue}>{liveScore}</Text>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreLabel}>LIVE</Text>
+          <Text style={[styles.scoreValue, { fontSize: sizes.scoreValueSize }]}>
+            {liveScore}
+          </Text>
         </View>
 
-        <View style={ui.scoreCard}>
-          <Text style={ui.scoreLabel}>LAST</Text>
-          <Text style={ui.scoreValueSmall}>{lastPlayedText || "—"}</Text>
+        <View style={styles.scoreCard}>
+          <Text style={styles.scoreLabel}>LAST</Text>
+          <Text style={[styles.scoreValueSmall, { fontSize: sizes.scoreSmallSize }]}>
+            {lastPlayedText || "—"}
+          </Text>
         </View>
       </View>
 
       {phase === "IN_GAME" ? (
-        <View style={ui.miniStats}>
-          <View style={ui.miniStat}>
-            <Text style={ui.miniStatKey}>CORRECT</Text>
-            <Text style={ui.miniStatVal}>{liveCorrect}</Text>
+        <View style={[styles.miniStats, { gap: sizes.gap }]}>
+          <View style={styles.miniStat}>
+            <Text style={styles.miniStatKey}>CORRECT</Text>
+            <Text style={styles.miniStatVal}>{liveCorrect}</Text>
           </View>
-          <View style={ui.miniStat}>
-            <Text style={ui.miniStatKey}>WRONG</Text>
-            <Text style={ui.miniStatVal}>{liveWrong}</Text>
+          <View style={styles.miniStat}>
+            <Text style={styles.miniStatKey}>WRONG</Text>
+            <Text style={styles.miniStatVal}>{liveWrong}</Text>
           </View>
-          <View style={ui.miniStat}>
-            <Text style={ui.miniStatKey}>MODE</Text>
-            <Text style={ui.miniStatVal}>LIVE</Text>
+          <View style={styles.miniStat}>
+            <Text style={styles.miniStatKey}>MODE</Text>
+            <Text style={styles.miniStatVal}>LIVE</Text>
           </View>
         </View>
       ) : null}
 
-      <Pressable onPress={onPrimary} style={[ui.cta, { borderColor: `${accent}88` }]}>
+      <Pressable
+        onPress={onPrimary}
+        style={[
+          styles.cta,
+          {
+            borderColor: accent,
+            backgroundColor: "#111111",
+          },
+        ]}
+      >
         <Animated.View
           pointerEvents="none"
           style={[
-            ui.ctaGlow,
+            styles.ctaGlow,
             {
               backgroundColor: glow,
               opacity: glowOpacity,
@@ -170,38 +237,68 @@ export function HudPanel(props: {
             },
           ]}
         />
-        <Text style={ui.ctaText}>{ctaText}</Text>
-        <Text style={ui.ctaSubText}>{connected ? "Tap to continue" : "Tap to scan QR"}</Text>
+        <Text style={[styles.ctaText, { fontSize: sizes.ctaTextSize }]}>{ctaText}</Text>
+        <Text style={[styles.ctaSubText, { fontSize: sizes.ctaSubTextSize }]}>
+          {ctaSubText}
+        </Text>
       </Pressable>
 
-      <View style={ui.quickRow}>
-        <Pressable onPress={onRoutes} style={ui.quickBtn}>
-          <Text style={ui.quickText}>MY ROUTES</Text>
+      <View style={[styles.quickRow, { gap: sizes.gap }]}>
+        <Pressable onPress={onRoutes} style={styles.quickBtn}>
+          <Text style={[styles.quickText, { fontSize: sizes.quickTextSize }]}>MY ROUTES</Text>
         </Pressable>
-        <Pressable onPress={onLeaderboard} style={ui.quickBtn}>
-          <Text style={ui.quickText}>LEADERBOARD</Text>
+
+        <Pressable onPress={onLeaderboard} style={styles.quickBtn}>
+          <Text style={[styles.quickText, { fontSize: sizes.quickTextSize }]}>
+            LEADERBOARD
+          </Text>
         </Pressable>
-        <Pressable onPress={onScan} style={ui.quickBtnAlt}>
-          <Text style={ui.quickText}>SCAN</Text>
+
+        <Pressable onPress={onScan} style={styles.quickBtnAlt}>
+          <Text style={[styles.quickTextDark, { fontSize: sizes.quickTextSize }]}>SCAN</Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
-const ui = StyleSheet.create({
+const styles = StyleSheet.create({
   hud: {
     marginTop: 14,
-    borderRadius: 22,
-    padding: 14,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "#F7F7F7",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
+    borderColor: "#D9D9D9",
     overflow: "hidden",
   },
-  hudTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  hudTitle: { color: "#fff", fontWeight: "900", fontSize: 18, letterSpacing: 0.8 },
-  hudHint: { color: "rgba(255,255,255,0.70)", fontWeight: "800", marginTop: 4 },
+
+  hudTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  titleWrap: {
+    flex: 1,
+    paddingRight: 8,
+  },
+
+  hudTitle: {
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+
+  hudHint: {
+    color: "#6B6B6B",
+    fontWeight: "500",
+    marginTop: 4,
+    lineHeight: 18,
+  },
+
+  liveWrap: {
+    justifyContent: "flex-start",
+  },
 
   livePill: {
     flexDirection: "row",
@@ -210,81 +307,160 @@ const ui = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.25)",
+    backgroundColor: "#EFEFEF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
-  livePillText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1.2, fontSize: 12 },
-  dot: { width: 10, height: 10, borderRadius: 999 },
 
-  scoreRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  livePillText: {
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+  },
+
+  scoreRow: {
+    flexDirection: "row",
+    marginTop: 12,
+  },
+
   scoreCard: {
     flex: 1,
-    borderRadius: 18,
+    minHeight: 86,
+    borderRadius: 16,
     padding: 12,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "#E3E3E3",
+    justifyContent: "space-between",
   },
-  scoreLabel: { color: "rgba(255,255,255,0.60)", fontWeight: "900", letterSpacing: 1.1, fontSize: 12 },
-  scoreValue: { color: "#fff", fontWeight: "900", fontSize: 22, marginTop: 6 },
-  scoreValueSmall: { color: "#fff", fontWeight: "900", fontSize: 13, marginTop: 10 },
 
-  miniStats: { marginTop: 10, flexDirection: "row", gap: 10 },
+  scoreLabel: {
+    color: "#7A7A7A",
+    fontWeight: "700",
+    letterSpacing: 0.9,
+    fontSize: 11,
+  },
+
+  scoreValue: {
+    color: "#111111",
+    fontWeight: "700",
+    marginTop: 6,
+  },
+
+  scoreValueSmall: {
+    color: "#111111",
+    fontWeight: "600",
+    marginTop: 10,
+  },
+
+  miniStats: {
+    marginTop: 10,
+    flexDirection: "row",
+  },
+
   miniStat: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#E3E3E3",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  miniStatKey: { color: "rgba(255,255,255,0.65)", fontWeight: "900", letterSpacing: 0.9, fontSize: 11 },
-  miniStatVal: { color: "#fff", fontWeight: "900", fontSize: 16 },
+
+  miniStatKey: {
+    color: "#7A7A7A",
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    fontSize: 11,
+  },
+
+  miniStatVal: {
+    color: "#111111",
+    fontWeight: "700",
+    fontSize: 16,
+  },
 
   cta: {
     marginTop: 12,
-    borderRadius: 20,
-    paddingVertical: 14,
+    borderRadius: 18,
+    paddingVertical: 15,
     paddingHorizontal: 14,
     borderWidth: 1,
-    backgroundColor: "#070B18",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
+
   ctaGlow: {
     position: "absolute",
-    width: 520,
-    height: 260,
+    width: 420,
+    height: 220,
     borderRadius: 999,
-    top: -140,
+    top: -120,
   },
-  ctaText: { color: "#EAF0FF", fontWeight: "900", fontSize: 16, letterSpacing: 1.1 },
-  ctaSubText: { color: "rgba(255,255,255,0.65)", fontWeight: "800", marginTop: 6 },
 
-  quickRow: { flexDirection: "row", gap: 10, marginTop: 10 },
+  ctaText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    letterSpacing: 0.8,
+  },
+
+  ctaSubText: {
+    color: "rgba(255,255,255,0.72)",
+    fontWeight: "500",
+    marginTop: 6,
+    textAlign: "center",
+  },
+
+  quickRow: {
+    flexDirection: "row",
+    marginTop: 10,
+  },
+
   quickBtn: {
     flex: 1,
+    minHeight: 46,
     paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "#EDEDED",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
     alignItems: "center",
+    justifyContent: "center",
   },
+
   quickBtnAlt: {
+    minHeight: 46,
     paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "rgba(122,162,255,0.16)",
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: "#111111",
     borderWidth: 1,
-    borderColor: "rgba(122,162,255,0.35)",
+    borderColor: "#111111",
     alignItems: "center",
+    justifyContent: "center",
   },
-  quickText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 0.9, fontSize: 12 },
+
+  quickText: {
+    color: "#111111",
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+
+  quickTextDark: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
 });

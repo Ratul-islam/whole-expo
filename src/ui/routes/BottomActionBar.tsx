@@ -1,5 +1,11 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+} from "react-native";
 
 export function BottomActionBar(props: {
   visible: boolean;
@@ -8,16 +14,26 @@ export function BottomActionBar(props: {
   onUpload: () => void;
 }) {
   const { visible, canUpload, onClose, onUpload } = props;
+  const { width } = useWindowDimensions();
+
   if (!visible) return null;
 
+  const isTablet = width >= 768;
+
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, { paddingHorizontal: isTablet ? 24 : 16 }]}>
       <Pressable onPress={onClose} style={s.btnGhost}>
         <Text style={s.btnGhostText}>Close</Text>
       </Pressable>
 
-      <Pressable onPress={onUpload} disabled={!canUpload} style={[s.btn, !canUpload && { opacity: 0.45 }]}>
-        <Text style={s.btnText}>{canUpload ? "Upload" : "Upload (scan device)"}</Text>
+      <Pressable
+        onPress={onUpload}
+        disabled={!canUpload}
+        style={[s.btnPrimary, !canUpload && s.btnDisabled]}
+      >
+        <Text style={s.btnPrimaryText}>
+          {canUpload ? "Upload" : "Upload (scan device)"}
+        </Text>
       </Pressable>
     </View>
   );
@@ -26,30 +42,46 @@ export function BottomActionBar(props: {
 const s = StyleSheet.create({
   wrap: {
     position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 14,
+    left: 0,
+    right: 0,
+    bottom: 18,
     flexDirection: "row",
     gap: 10,
   },
+
   btnGhost: {
     flex: 1,
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "#EDEDED",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "#D9D9D9",
   },
-  btnGhostText: { color: "#EAF0FF", fontWeight: "900" },
-  btn: {
+
+  btnGhostText: {
+    color: "#111111",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+
+  btnPrimary: {
     flex: 1,
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: "rgba(122,162,255,0.22)",
+    backgroundColor: "#111111",
     borderWidth: 1,
-    borderColor: "rgba(122,162,255,0.35)",
+    borderColor: "#111111",
   },
-  btnText: { color: "#EAF0FF", fontWeight: "900" },
+
+  btnPrimaryText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+
+  btnDisabled: {
+    opacity: 0.45,
+  },
 });

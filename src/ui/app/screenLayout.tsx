@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, StyleSheet, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export function ScreenLayout({
@@ -11,17 +11,45 @@ export function ScreenLayout({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  const { width } = useWindowDimensions();
+
+  const isSmallPhone = width < 360;
+  const isTablet = width >= 768;
+
+  const horizontalPadding = isTablet ? 24 : isSmallPhone ? 14 : 16;
+  const contentMaxWidth = isTablet ? 720 : 520;
+
   return (
-    <SafeAreaView style={s.safe}>
-      <View style={s.body}>{children}</View>
+    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+      <View style={styles.outer}>
+        <View
+          style={[
+            styles.body,
+            {
+              paddingHorizontal: horizontalPadding,
+              paddingTop: isTablet ? 12 : 8,
+              maxWidth: contentMaxWidth,
+            },
+          ]}
+        >
+          {children}
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#0B0F1A" },
-  header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 },
-  title: { fontSize: 22, fontWeight: "700", color: "white" },
-  subtitle: { marginTop: 6, fontSize: 14, color: "rgba(255,255,255,0.7)" },
-  body: { flex: 1, paddingHorizontal: 16, paddingTop: 8 },
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  outer: {
+    flex: 1,
+    alignItems: "center",
+  },
+  body: {
+    flex: 1,
+    width: "100%",
+  },
 });

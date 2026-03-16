@@ -25,6 +25,18 @@ export const pathService = {
     const { data } = await api.get(ENDPOINTS.PATH.ALLPATH, { params });
     return data;
   },
+  getSinglePath: async (params: { pathId: string; page?: number; limit?: number }) => {
+  const { pathId, page = 1, limit = 10 } = params;
+
+  const { data } = await api.get(
+    `${ENDPOINTS.PATH.PATHDETAILS}/${pathId}`,
+    {
+      params: { page, limit },
+    }
+  );
+
+  return data;
+},
 
   updatePath: async (payload: UpdatePathRequest) => {
     const { data } = await api.patch(ENDPOINTS.PATH.UPDATE, payload);

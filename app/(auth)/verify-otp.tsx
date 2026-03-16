@@ -1,14 +1,24 @@
 import { useMemo, useState } from "react";
-import { Text } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
+
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { authService } from "../../src/auth/auth.service";
 import { useAuthStore } from "../../src/auth/auth.store";
-import { AuthLayout } from "../../src/ui/auth/authLayout";
-import { AuthInput } from "../../src/ui/auth/authInput";
-import { AuthButton } from "../../src/ui/auth/authButton";
-import { AuthLink } from "../../src/ui/auth/authLink";
-import { authStyles as s } from "../../src/ui/auth/authStyles";
 import { getErrorMessage } from "../../src/ui/auth/error";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function VerifyOtpScreen() {
   const router = useRouter();
@@ -17,11 +27,12 @@ export default function VerifyOtpScreen() {
   const params = useLocalSearchParams<{ email?: string; otpSessionId?: string }>();
 
   const email = useMemo(() => (params.email ? String(params.email) : ""), [params.email]);
-
   const otpSessionId = useMemo(
     () => (params.otpSessionId ? String(params.otpSessionId) : ""),
     [params.otpSessionId]
   );
+
+  const { width, height } = useWindowDimensions();
 
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,6 +40,35 @@ export default function VerifyOtpScreen() {
 
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  const ui = useMemo(() => {
+    const isSmallPhone = width < 360;
+    const isTabletLike = width >= 768;
+
+    const horizontalPadding = isTabletLike ? 40 : width < 390 ? 20 : 24;
+    const cardMaxWidth = isTabletLike ? 520 : 460;
+    const logoWidth = Math.min(width * 0.62, 280);
+    const logoHeight = logoWidth * 0.52;
+
+    return {
+      horizontalPadding,
+      cardMaxWidth,
+      logoWidth,
+      logoHeight,
+      titleSize: isTabletLike ? 30 : isSmallPhone ? 28 : 30,
+      subtitleSize: isTabletLike ? 17 : 16,
+      inputHeight: isSmallPhone ? 50 : 54,
+      buttonHeight: isSmallPhone ? 50 : 54,
+      topSpacing: height < 700 ? 20 : isTabletLike ? 48 : 32,
+      logoBottom: height < 700 ? 28 : 40,
+      sectionGap: isSmallPhone ? 12 : 14,
+    };
+  }, [width, height]);
+
+  const resetMessages = () => {
+    if (err) setErr(null);
+    if (info) setInfo(null);
+  };
 
   const onVerify = async () => {
     setErr(null);
@@ -38,6 +78,7 @@ export default function VerifyOtpScreen() {
       setErr("Email is missing. Please go back and try again.");
       return;
     }
+
     if (otp.trim().length !== 6) {
       setErr("Please enter the 6-digit OTP.");
       return;
@@ -45,16 +86,23 @@ export default function VerifyOtpScreen() {
 
     setLoading(true);
     try {
-      const payload: any = { email: email.trim(), code: otp.trim() };
+      const payload: any = {
+        email: email.trim(),
+        code: otp.trim(),
+      };
+
       if (otpSessionId) payload.otpSessionId = otpSessionId;
 
       await authService.verifyEmailOtp(payload);
 
       await bootstrap();
-      router.replace({
-        pathname:"/(auth)/login",
-        params: { verified:"true"}
-      });
+router.replace({
+  pathname: "/(auth)/login",
+  params: {
+    verified: "true",
+    email,
+  },
+});
     } catch (e: any) {
       setErr(getErrorMessage(e));
     } finally {
@@ -73,7 +121,10 @@ export default function VerifyOtpScreen() {
 
     setResending(true);
     try {
-      await authService.resendEmailOtp({ email: email.trim(), type: "EMAIL_VERIFICATION" });
+      await authService.resendEmailOtp({
+        email: email.trim(),
+        type: "EMAIL_VERIFICATION",
+      });
       setInfo("OTP sent again.");
     } catch (e: any) {
       setErr(getErrorMessage(e));
@@ -83,27 +134,205 @@ export default function VerifyOtpScreen() {
   };
 
   return (
-    <AuthLayout title="Verify OTP" subtitle={`We sent a code to: ${email || "your email"}`}>
-      <AuthInput
-        placeholder="Enter OTP"
-        keyboardType="number-pad"
-        value={otp}
-        onChangeText={setOtp}
-        maxLength={6}
-      />
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingHorizontal: ui.horizontalPadding,
+              paddingTop: ui.topSpacing,
+              paddingBottom: 24,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.inner, { maxWidth: ui.cardMaxWidth }]}>
+            <View style={[styles.logoWrap, { marginBottom: ui.logoBottom }]}>
+              <Image
+                source={require("../../assets/images/icon.png")}
+                resizeMode="contain"
+                style={{
+                  width: ui.logoWidth,
+                  height: ui.logoHeight,
+                }}
+              />
+            </View>
 
-      {err ? <Text style={s.error}>{err}</Text> : null}
-      {info ? <Text style={s.info}>{info}</Text> : null}
+            <Text style={[styles.title, { fontSize: ui.titleSize }]}>Verify OTP</Text>
 
-      <AuthButton title="Verify" loading={loading} onPress={onVerify} disabled={loading} />
-      <AuthButton
-        title="Resend OTP"
-        loading={resending}
-        onPress={onResend}
-        disabled={resending}
-      />
+            <Text style={[styles.subtitle, { fontSize: ui.subtitleSize }]}>
+              We sent a code to: {email || "your email"}
+            </Text>
 
-      <AuthLink text="Change email" onPress={() => router.replace("/(auth)/register")} />
-    </AuthLayout>
+            <TextInput
+              placeholder="Enter 6-digit OTP"
+              placeholderTextColor="#A5A5A5"
+              keyboardType="number-pad"
+              value={otp}
+              onChangeText={(text) => {
+                const clean = text.replace(/[^0-9]/g, "");
+                setOtp(clean);
+                resetMessages();
+              }}
+              maxLength={6}
+              style={[
+                styles.input,
+                {
+                  height: ui.inputHeight,
+                  marginBottom: ui.sectionGap,
+                },
+              ]}
+            />
+
+            {err ? <Text style={styles.error}>{err}</Text> : null}
+            {info ? <Text style={styles.info}>{info}</Text> : null}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                {
+                  height: ui.buttonHeight,
+                  opacity: pressed || loading ? 0.88 : 1,
+                },
+              ]}
+              onPress={onVerify}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Verify</Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                {
+                  height: ui.buttonHeight,
+                  opacity: pressed || resending ? 0.88 : 1,
+                },
+              ]}
+              onPress={onResend}
+              disabled={resending}
+            >
+              {resending ? (
+                <ActivityIndicator color="#111111" />
+              ) : (
+                <Text style={styles.secondaryButtonText}>Resend OTP</Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.replace("/(auth)/register")}
+              style={styles.backButton}
+            >
+              <Text style={styles.backButtonText}>Change email</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: "#F4F4F4",
+  },
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+  inner: {
+    width: "100%",
+    alignSelf: "center",
+  },
+  logoWrap: {
+    alignItems: "center",
+  },
+  title: {
+    textAlign: "center",
+    fontWeight: "700",
+    color: "#111111",
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    textAlign: "center",
+    color: "#2B2B2B",
+    marginBottom: 28,
+    lineHeight: 22,
+  },
+  input: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#D9D9D9",
+    borderRadius: 12,
+    backgroundColor: "#F7F7F7",
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: "#111111",
+    textAlign: "center",
+    letterSpacing: 6,
+  },
+  info: {
+    color: "#0F8A5F",
+    fontSize: 14,
+    marginTop: -4,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  error: {
+    color: "#D93025",
+    fontSize: 14,
+    marginTop: -4,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  primaryButton: {
+    width: "100%",
+    borderRadius: 12,
+    backgroundColor: "#000000",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  secondaryButton: {
+    width: "100%",
+    borderRadius: 12,
+    backgroundColor: "#EDEDED",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  secondaryButtonText: {
+    color: "#111111",
+    fontSize: 17,
+    fontWeight: "500",
+  },
+  backButton: {
+    alignSelf: "center",
+    marginTop: 4,
+  },
+  backButtonText: {
+    fontSize: 14,
+    color: "#444444",
+  },
+});
