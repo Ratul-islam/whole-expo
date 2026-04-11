@@ -8,7 +8,7 @@ type DeviceQrStrict = {
   type: "device";
   deviceId: string;
   deviceSecret: string;
-  boardConf: "4x5" | "2x5";
+  boardConf: "20" | "10";
   v: 1;
 };
 
@@ -25,7 +25,6 @@ function isNonEmptyString(x: unknown): x is string {
 }
 
 function parseStrictDeviceQr(raw: string): { ok: true; value: DeviceQrStrict } | { ok: false; reason: string } {
-
   const s = String(raw ?? "").trim();
   if (!s) return { ok: false, reason: "Wrong QR code." };
 
@@ -40,18 +39,16 @@ function parseStrictDeviceQr(raw: string): { ok: true; value: DeviceQrStrict } |
   if (obj.v !== 1) return { ok: false, reason: "Unsupported QR version." };
   
   if (!isNonEmptyString(obj.deviceId)) return { ok: false, reason: "Invalid device QR." };
-  console.log("new "+obj.deviceSecret)
   if (!isNonEmptyString(obj.deviceSecret)) return { ok: false, reason: "Invalid device QR." };
-  console.log(obj)
-  if (obj.boardConf !== "4x5" && obj.boardConf !== "2x5") return { ok: false, reason: "Wrong QR code." };
+  if (obj.boardConf !== "20" && obj.boardConf !== "10") return { ok: false, reason: "Wrong QR code." };
   
   const deviceId = obj.deviceId.trim();
   const deviceSecret = obj.deviceSecret.trim();
   const boardConf = obj.boardConf;
-
+  
   if (deviceId.length < 3 || deviceSecret.length < 3) return { ok: false, reason: "Invalid device QR." };
-
-  return { ok: true, value: { type: "device", deviceId, deviceSecret,boardConf, v: 1 } };
+  
+  return { ok: true, value: { type: "device", deviceId, deviceSecret, boardConf, v: 1 } };
 }
 
 function extractApiErrorMessage(err: any) {
@@ -72,7 +69,6 @@ export default function Scanner() {
   const [permission, requestPermission] = useCameraPermissions();
 
   const [busy, setBusy] = useState(false);
-
   const scanLockRef = useRef(false);
 
   const [popup, setPopup] = useState<PopupState>({ open: false });
@@ -109,8 +105,7 @@ export default function Scanner() {
       return;
     }
 
-    setBusy(true);
-    console.log(parsed.value.boardConf)
+    setBusy(true); // Show "Connecting..." overlay
     try {
       await sessionService.start({
         deviceId: parsed.value.deviceId,
@@ -118,13 +113,15 @@ export default function Scanner() {
         boardConf: parsed.value.boardConf
       });
 
-      router.replace({
-        pathname: "/(app)",
-        params: {
-          deviceId: parsed.value.deviceId,
-          deviceSecret: parsed.value.deviceSecret,
-        },
-      });
+      // router.replace({
+      //   pathname: "/(app)/device",
+      //   params: {
+      //     deviceId: parsed.value.deviceId,
+      //     deviceSecret: parsed.value.deviceSecret,
+      //   },
+      // });
+
+      router.back();
     } catch (err: any) {
       const msg = extractApiErrorMessage(err);
       showErrorPopup(msg, "Connection error");
@@ -134,7 +131,7 @@ export default function Scanner() {
   if (!permission) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator color="#B48CFF" />
         <Text style={styles.centerText}>Preparing camera…</Text>
       </View>
     );
@@ -199,24 +196,37 @@ export default function Scanner() {
         </View>
       </View>
 
+      {/* FULL SCREEN LOADING OVERLAY */}
+      {busy && !popup.open && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#B48CFF" />
+            <Text style={styles.loadingCardText}>Connecting to device...</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ERROR MODAL */}
       <Modal visible={popup.open} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{popup.open ? popup.title : ""}</Text>
-            </View>
+          {popup.open && (
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{popup.title}</Text>
+              </View>
 
-            <Text style={styles.modalMessage}>{popup.open ? popup.message : ""}</Text>
+              <Text style={styles.modalMessage}>{popup.message}</Text>
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={[styles.modalBtn, styles.modalBtnPrimary]}
-                onPress={resetScan}
-              >
-                <Text style={styles.modalBtnPrimaryText}>SCAN AGAIN</Text>
-              </Pressable>
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={[styles.modalBtn, styles.modalBtnPrimary]}
+                  onPress={resetScan}
+                >
+                  <Text style={styles.modalBtnPrimaryText}>SCAN AGAIN</Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </Modal>
     </View>
@@ -305,6 +315,31 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.12)",
   },
   secondaryBtnText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1 },
+
+  // NEW: Loading Overlay
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+  },
+  loadingCard: {
+    backgroundColor: "rgba(10, 10, 20, 0.95)",
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(180, 140, 255, 0.35)",
+    alignItems: "center",
+    gap: 16,
+  },
+  loadingCardText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
 
   // Modal popup
   modalBackdrop: {

@@ -35,6 +35,7 @@ export const ENDPOINTS = {
     STARTGAME: "/device/start-game",
     PAUSEGAME: "/device/pause-game",
     RESUMEGAME: "/device/resume-game",
+    ENDGAME: "/device/end-game",
     LIVE: "/device/live"
   },
   USER: {

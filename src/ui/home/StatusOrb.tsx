@@ -1,42 +1,17 @@
-import React, { useEffect, useMemo, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  Easing,
-  useWindowDimensions,
-} from "react-native";
-
-export type DevicePhase =
-  | "DISCONNECTED"
-  | "CONNECTED"
-  | "PRESET_LOADED"
-  | "PAUSED"
-  | "IN_GAME"
-  | "COMPLETED"
-  | "ABANDONED";
-
-export const phaseLabel = (phase: DevicePhase) => {
-  if (phase === "DISCONNECTED") return "DISCONNECTED";
-  if (phase === "PAUSED") return "PAUSED";
-  if (phase === "CONNECTED") return "CONNECTED";
-  if (phase === "PRESET_LOADED") return "READY";
-  if (phase === "IN_GAME") return "IN GAME";
-  if (phase === "COMPLETED") return "COMPLETED";
-  if (phase === "ABANDONED") return "TIMED OUT";
-  return "CONNECTED";
-};
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
+import { DevicePhase, phaseLabel } from "./HudPanel";
+import { useEffect, useMemo, useRef } from "react";
+import { StyleSheet,Text,View ,Animated,Easing} from "react-native";
 
 function phaseAccent(phase: DevicePhase) {
-  if (phase === "DISCONNECTED") return ["#8A8A8A", "rgba(138,138,138,0.18)"] as const;
-  if (phase === "CONNECTED") return ["#5B8DEF", "rgba(91,141,239,0.16)"] as const;
-  if (phase === "PAUSED") return ["#7E8695", "rgba(126,134,149,0.16)"] as const;
-  if (phase === "PRESET_LOADED") return ["#91B508", "rgba(145,181,8,0.16)"] as const;
-  if (phase === "IN_GAME") return ["#E4A11B", "rgba(228,161,27,0.16)"] as const;
-  if (phase === "COMPLETED") return ["#9B72E8", "rgba(155,114,232,0.16)"] as const;
-  if (phase === "ABANDONED") return ["#E15572", "rgba(225,85,114,0.16)"] as const;
-  return ["#5B8DEF", "rgba(91,141,239,0.16)"] as const;
+  if (phase === "DISCONNECTED") return ["#8A8A8A", "rgba(138,138,138,0.16)"] as const;
+  if (phase === "CONNECTED") return ["#5B8DEF", "rgba(91,141,239,0.14)"] as const;
+  if (phase === "PAUSED") return ["#7E8695", "rgba(126,134,149,0.14)"] as const;
+  if (phase === "PRESET_LOADED") return ["#91B508", "rgba(145,181,8,0.14)"] as const;
+  if (phase === "IN_GAME") return ["#E4A11B", "rgba(228,161,27,0.14)"] as const;
+  if (phase === "COMPLETED") return ["#9B72E8", "rgba(155,114,232,0.14)"] as const;
+  if (phase === "ABANDONED") return ["#E15572", "rgba(225,85,114,0.14)"] as const;
+  return ["#5B8DEF", "rgba(91,141,239,0.14)"] as const;
 }
 
 export function StatusOrb(props: {
@@ -47,20 +22,16 @@ export function StatusOrb(props: {
 }) {
   const { phase, deviceId, wsOnline, session } = props;
 
-  const { width } = useWindowDimensions();
-
-  const isSmallPhone = width < 360;
-  const isTablet = width >= 768;
+  const scaleHook = useResponsiveScale();
+  const styles = useMemo(() => getOrbStyles(scaleHook), [scaleHook]);
 
   const sizes = useMemo(
     () => ({
-      outer: isTablet ? 250 : isSmallPhone ? 190 : 210,
-      core: isTablet ? 200 : isSmallPhone ? 150 : 172,
-      glow: isTablet ? 320 : 260,
-      title: isTablet ? 20 : 18,
-      sub: isTablet ? 14 : 13,
+      outer: scaleHook(210),
+      core: scaleHook(172),
+      glow: scaleHook(260),
     }),
-    [isSmallPhone, isTablet]
+    [scaleHook]
   );
 
   const [main, glow] = useMemo(() => phaseAccent(phase), [phase]);
@@ -136,11 +107,11 @@ export function StatusOrb(props: {
             },
           ]}
         >
-          <Text style={[styles.orbTitle, { fontSize: sizes.title }]}>
+          <Text style={styles.orbTitle}>
             {phaseLabel(phase)}
           </Text>
 
-          <Text style={[styles.orbSub, { fontSize: sizes.sub }]} numberOfLines={1}>
+          <Text style={styles.orbSub} numberOfLines={1}>
             {phase === "DISCONNECTED"
               ? "No device"
               : `Device ${deviceId || "—"}`}
@@ -164,17 +135,12 @@ export function StatusOrb(props: {
                 style={[
                   styles.dot,
                   {
-                    backgroundColor:
-                      session?.control === "online"
-                        ? "#22A06B"
-                        : "#E15572",
+                    backgroundColor: session?.control === "online" ? "#22A06B" : "#E15572",
                   },
                 ]}
               />
               <Text style={styles.orbMeta}>
-                {session?.control === "online"
-                  ? "App Mode"
-                  : "Manual Mode"}
+                {session?.control === "online" ? "App Mode" : "Manual Mode"}
               </Text>
             </View>
           )}
@@ -184,64 +150,33 @@ export function StatusOrb(props: {
   );
 }
 
-const styles = StyleSheet.create({
-  orbWrap: {
-    marginTop: 16,
-    alignItems: "center",
-  },
 
-  orbOuter: {
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
 
-  orbGlow: {
-    position: "absolute",
-    borderRadius: 999,
-  },
 
-  orbCore: {
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: "#F7F7F7",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-
-  orbTitle: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-
-  orbSub: {
-    color: "#6B6B6B",
-    fontWeight: "500",
-    marginTop: 8,
-  },
-
-  orbMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 10,
-  },
-
-  orbMeta: {
-    color: "#444444",
-    fontWeight: "600",
-    letterSpacing: 0.8,
-    fontSize: 12,
-  },
-
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-});
+// --- ORB STYLES ---
+const getOrbStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    orbWrap: { marginTop: s(16), alignItems: "center" },
+    orbOuter: {
+      borderRadius: 999,
+      borderWidth: 1,
+      backgroundColor: "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    orbGlow: { position: "absolute", borderRadius: 999 },
+    orbCore: {
+      borderRadius: 999,
+      borderWidth: 1,
+      backgroundColor: "#F7F7F7",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: s(14),
+    },
+    orbTitle: { color: "#111111", fontWeight: "700", letterSpacing: 1, fontSize: s(13) },
+    orbSub: { color: "#6B6B6B", fontWeight: "500", marginTop: s(8), fontSize: s(11) },
+    orbMetaRow: { flexDirection: "row", alignItems: "center", gap: s(8), marginTop: s(10) },
+    orbMeta: { color: "#444444", fontWeight: "600", letterSpacing: 0.8, fontSize: s(10) },
+    dot: { width: s(10), height: s(10), borderRadius: 999 },
+  });

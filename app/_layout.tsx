@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAuthStore } from "../src/auth/auth.store";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, BackHandler } from "react-native";
 import { useRouter, useSegments, Stack } from "expo-router";
 
 export default function RootLayout() {
@@ -21,6 +21,21 @@ export default function RootLayout() {
     if (isAuthed && inAuthGroup) router.replace("/(app)");
   }, [isAuthed, isBooting, segments]);
 
+  useEffect(()=>{
+    const onBackPress=()=>{
+      if(!router.canGoBack()){
+        BackHandler.exitApp();
+        return true
+      }
+      return false
+    }
+
+    const sub = BackHandler.addEventListener('hardwareBackPress' ,onBackPress )
+
+    return ()=>sub.remove()
+  })
+  
+  
   if (isBooting) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>

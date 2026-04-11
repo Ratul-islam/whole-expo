@@ -7,7 +7,7 @@ export type LeaderboardQuery = {
   page?: number;
   limit?: number;
   type?: LeaderboardType;
-  boardConf: string;
+  boardConf?: string;
 };
 
 export type GamesLeaderboardItem = {

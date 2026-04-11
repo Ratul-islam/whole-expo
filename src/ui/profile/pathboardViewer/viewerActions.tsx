@@ -1,8 +1,19 @@
-import React from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useMemo } from "react";
+import {
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  View,
+} from "react-native";
 import type { ToastState } from "./viewerToast";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
 
+type HandBit = 0 | 1;
+export type PathStep = [number, HandBit];
 type ActionFn = () => Promise<any> | void;
+
+
 
 export function ViewerActions({
   context,
@@ -64,6 +75,9 @@ export function ViewerActions({
   uploadLabel: string;
   uploadBusy: boolean;
 }) {
+  const scale = useResponsiveScale();
+  const s = useMemo(() => getActionStyles(scale), [scale]);
+
   return (
     <View style={s.actionBar}>
       <Pressable onPress={handleClose} style={s.actionGhost}>
@@ -172,14 +186,16 @@ export function ViewerActions({
 
       {context === "OWNER" ? (
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            if (!uploadEnabled) return;
+
             safeRun(
               onUpload,
               { type: "info", title: "Uploading", message: "Sending to device…" },
               { type: "success", title: "Uploaded", message: "Route uploaded to device." },
               (e) => ({ type: "error", title: "Upload failed", message: e?.message || "Try again." })
-            )
-          }
+            );
+          }}
           disabled={!uploadEnabled}
           style={[s.actionPrimaryWrap, !uploadEnabled && { opacity: 0.45 }]}
         >
@@ -193,7 +209,7 @@ export function ViewerActions({
                 ]}
                 numberOfLines={1}
               >
-                {uploadEnabled ? uploadLabel : "SCAN DEVICE TO UPLOAD"}
+                {uploadLabel}
               </Text>
             </View>
           </View>
@@ -203,89 +219,51 @@ export function ViewerActions({
   );
 }
 
-const s = StyleSheet.create({
-  actionBar: {
-    marginTop: 14,
-    flexDirection: "row",
-    gap: 10,
-  },
-  actionGhost: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: "center",
-    backgroundColor: "#EDEDED",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-  },
-  actionGhostText: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-  actionMidWrap: {
-    flex: 1.2,
-  },
-  actionMid: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  actionPrimaryWrap: {
-    flex: 2.1,
-  },
-  actionPrimary: {
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  actionDark: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
-  actionLight: {
-    backgroundColor: "#EDEDED",
-    borderColor: "#D9D9D9",
-  },
-  actionWarn: {
-    backgroundColor: "rgba(225,85,114,0.08)",
-    borderColor: "rgba(225,85,114,0.28)",
-  },
-  actionInnerRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  actionIcon: {
-    color: "#111111",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  actionMidText: {
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    fontSize: 12,
-  },
-  actionPrimaryText: {
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    fontSize: 12,
-  },
-  actionDarkText: {
-    color: "#FFFFFF",
-  },
-  actionLightText: {
-    color: "#111111",
-  },
-  actionWarnText: {
-    color: "#C44760",
-  },
-});
+const getActionStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    actionBar: { marginTop: s(14), flexDirection: "row", gap: s(10) },
+    actionGhost: {
+      flex: 1,
+      borderRadius: s(16),
+      paddingVertical: s(16),
+      alignItems: "center",
+      backgroundColor: "#EDEDED",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+    },
+    actionGhostText: { color: "#111111", fontWeight: "700", letterSpacing: 0.8, fontSize: s(11) },
+    actionMidWrap: { flex: 1.2 },
+    actionMid: {
+      borderRadius: s(16),
+      paddingVertical: s(16),
+      paddingHorizontal: s(12),
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    actionPrimaryWrap: { flex: 2.1 },
+    actionPrimary: {
+      borderRadius: s(16),
+      paddingVertical: s(16),
+      paddingHorizontal: s(12),
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+    },
+    actionDark: { backgroundColor: "#111111", borderColor: "#111111" },
+    actionLight: { backgroundColor: "#EDEDED", borderColor: "#D9D9D9" },
+    actionWarn: { backgroundColor: "rgba(225,85,114,0.08)", borderColor: "rgba(225,85,114,0.28)" },
+    actionInnerRow: {
+      width: "100%",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: s(8),
+    },
+    actionIcon: { color: "#111111", fontWeight: "700", fontSize: s(11) },
+    actionMidText: { fontWeight: "700", letterSpacing: 0.5, fontSize: s(11) },
+    actionPrimaryText: { fontWeight: "700", letterSpacing: 0.5, fontSize: s(8) },
+    actionDarkText: { color: "#FFFFFF" },
+    actionLightText: { color: "#111111" },
+    actionWarnText: { color: "#C44760" },
+  });

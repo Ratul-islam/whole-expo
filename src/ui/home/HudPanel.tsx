@@ -6,20 +6,17 @@ import {
   Pressable,
   Animated,
   Easing,
-  useWindowDimensions,
 } from "react-native";
-import { DevicePhase, phaseLabel } from "./StatusOrb";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
 
-function phaseHint(phase: DevicePhase) {
-  if (phase === "DISCONNECTED") return "Scan device to connect.";
-  if (phase === "CONNECTED") return "Load a route to start.";
-  if (phase === "PAUSED") return "Game is paused.";
-  if (phase === "PRESET_LOADED") return "Hit Start on the board.";
-  if (phase === "IN_GAME") return "Live score updating...";
-  if (phase === "COMPLETED") return "Run ended. Pick a new route.";
-  if (phase === "ABANDONED") return "Run abandoned. Reconnect and try again.";
-  return "";
-}
+export type DevicePhase =
+  | "DISCONNECTED"
+  | "CONNECTED"
+  | "PRESET_LOADED"
+  | "PAUSED"
+  | "IN_GAME"
+  | "COMPLETED"
+  | "ABANDONED";
 
 function primaryCtaText(phase: DevicePhase) {
   if (phase === "DISCONNECTED") return "SCAN DEVICE";
@@ -30,6 +27,28 @@ function primaryCtaText(phase: DevicePhase) {
   if (phase === "COMPLETED") return "PLAY AGAIN";
   if (phase === "ABANDONED") return "RECONNECT";
   return "CONTINUE";
+}
+
+export const phaseLabel = (phase: DevicePhase) => {
+  if (phase === "DISCONNECTED") return "DISCONNECTED";
+  if (phase === "PAUSED") return "PAUSED";
+  if (phase === "CONNECTED") return "CONNECTED";
+  if (phase === "PRESET_LOADED") return "LOADED";
+  if (phase === "IN_GAME") return "IN GAME";
+  if (phase === "COMPLETED") return "COMPLETED";
+  if (phase === "ABANDONED") return "TIMED OUT";
+  return "CONNECTED";
+};
+
+function phaseHint(phase: DevicePhase) {
+  if (phase === "DISCONNECTED") return "Scan device to connect.";
+  if (phase === "CONNECTED") return "Load a route to start.";
+  if (phase === "PAUSED") return "Game is paused.";
+  if (phase === "PRESET_LOADED") return "Hit Start on the board.";
+  if (phase === "IN_GAME") return "Live score updating...";
+  if (phase === "COMPLETED") return "Run ended. Pick a new route.";
+  if (phase === "ABANDONED") return "Run abandoned. Reconnect and try again.";
+  return "";
 }
 
 function phaseAccent(phase: DevicePhase) {
@@ -74,27 +93,8 @@ export function HudPanel(props: {
     onScan,
   } = props;
 
-  const { width } = useWindowDimensions();
-
-  const isSmallPhone = width < 360;
-  const isTabletLike = width >= 768;
-
-  const sizes = useMemo(
-    () => ({
-      panelRadius: isTabletLike ? 24 : 20,
-      panelPadding: isTabletLike ? 18 : isSmallPhone ? 12 : 14,
-      titleSize: isTabletLike ? 20 : 18,
-      hintSize: isTabletLike ? 14 : 13,
-      scoreValueSize: isTabletLike ? 26 : isSmallPhone ? 20 : 22,
-      scoreSmallSize: isTabletLike ? 14 : 12.5,
-      ctaTextSize: isTabletLike ? 17 : 15.5,
-      ctaSubTextSize: isTabletLike ? 13 : 12.5,
-      quickTextSize: isTabletLike ? 13 : 12,
-      pillTextSize: isTabletLike ? 12.5 : 11.5,
-      gap: isTabletLike ? 12 : 10,
-    }),
-    [isSmallPhone, isTabletLike]
-  );
+  const scaleHook = useResponsiveScale();
+  const styles = useMemo(() => getHudStyles(scaleHook), [scaleHook]);
 
   const hudTitle = useMemo(() => phaseLabel(phase), [phase]);
   const hudHint = useMemo(() => phaseHint(phase), [phase]);
@@ -144,63 +144,55 @@ export function HudPanel(props: {
     : "Tap to scan QR";
 
   return (
-    <View
-      style={[
-        styles.hud,
-        {
-          borderRadius: sizes.panelRadius,
-          padding: sizes.panelPadding,
-        },
-      ]}
-    >
+    <View style={styles.hud}>
       <View style={styles.hudTop}>
         <View style={styles.titleWrap}>
-          <Text style={[styles.hudTitle, { fontSize: sizes.titleSize }]} numberOfLines={1}>
+          <Text style={styles.hudTitle} numberOfLines={1}>
             {hudTitle}
           </Text>
-          <Text style={[styles.hudHint, { fontSize: sizes.hintSize }]}>{hudHint}</Text>
+          <Text style={styles.hudHint}>{hudHint}</Text>
         </View>
 
         <View style={styles.liveWrap}>
           <View style={styles.livePill}>
             <View
               style={[
-                styles.dot,
+                styles.liveDot,
                 { backgroundColor: isLive ? "#22A06B" : "#E15572" },
               ]}
             />
-            <Text style={[styles.livePillText, { fontSize: sizes.pillTextSize }]}>
+            <Text style={styles.livePillText}>
               {signalText}
             </Text>
           </View>
         </View>
       </View>
 
-      <View style={[styles.scoreRow, { gap: sizes.gap }]}>
+      <View style={styles.scoreRow}>
         <View style={styles.scoreCard}>
           <Text style={styles.scoreLabel}>TOTAL</Text>
-          <Text style={[styles.scoreValue, { fontSize: sizes.scoreValueSize }]}>
+          <Text style={styles.scoreValue}>
             {totalScore}
           </Text>
         </View>
 
         <View style={styles.scoreCard}>
           <Text style={styles.scoreLabel}>LIVE</Text>
-          <Text style={[styles.scoreValue, { fontSize: sizes.scoreValueSize }]}>
+          <Text style={styles.scoreValue}>
             {liveScore}
           </Text>
         </View>
 
         <View style={styles.scoreCard}>
           <Text style={styles.scoreLabel}>LAST</Text>
-          <Text style={[styles.scoreValueSmall, { fontSize: sizes.scoreSmallSize }]}>
+          <Text style={styles.scoreValueSmall}>
             {lastPlayedText || "—"}
           </Text>
         </View>
       </View>
 
       {phase === "IN_GAME" ? (
-        <View style={[styles.miniStats, { gap: sizes.gap }]}>
+        <View style={styles.miniStats}>
           <View style={styles.miniStat}>
             <Text style={styles.miniStatKey}>CORRECT</Text>
             <Text style={styles.miniStatVal}>{liveCorrect}</Text>
@@ -237,230 +229,137 @@ export function HudPanel(props: {
             },
           ]}
         />
-        <Text style={[styles.ctaText, { fontSize: sizes.ctaTextSize }]}>{ctaText}</Text>
-        <Text style={[styles.ctaSubText, { fontSize: sizes.ctaSubTextSize }]}>
+        <Text style={styles.ctaText}>{ctaText}</Text>
+        <Text style={styles.ctaSubText}>
           {ctaSubText}
         </Text>
       </Pressable>
 
-      <View style={[styles.quickRow, { gap: sizes.gap }]}>
+      <View style={styles.quickRow}>
         <Pressable onPress={onRoutes} style={styles.quickBtn}>
-          <Text style={[styles.quickText, { fontSize: sizes.quickTextSize }]}>MY ROUTES</Text>
+          <Text style={styles.quickText}>MY ROUTES</Text>
         </Pressable>
 
         <Pressable onPress={onLeaderboard} style={styles.quickBtn}>
-          <Text style={[styles.quickText, { fontSize: sizes.quickTextSize }]}>
-            LEADERBOARD
-          </Text>
+          <Text style={styles.quickText}>LEADERBOARD</Text>
         </Pressable>
 
-        <Pressable onPress={onScan} style={styles.quickBtnAlt}>
-          <Text style={[styles.quickTextDark, { fontSize: sizes.quickTextSize }]}>SCAN</Text>
-        </Pressable>
+        {/* Dynamic 3rd Button: Hide if disconnected, show "END GAME" if connected */}
+        {connected ? (
+           <Pressable onPress={onScan} style={styles.quickBtnDanger}>
+             <Text style={styles.quickTextDanger}>END GAME</Text>
+           </Pressable>
+        ) : null}
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  hud: {
-    marginTop: 14,
-    backgroundColor: "#F7F7F7",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    overflow: "hidden",
-  },
+const getHudStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    hud: {
+      marginTop: s(14),
+      backgroundColor: "#F7F7F7",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      borderRadius: s(20),
+      padding: s(14),
+      overflow: "hidden",
+    },
+    hudTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: s(10) },
+    titleWrap: { flex: 1, paddingRight: s(8) },
+    hudTitle: { color: "#111111", fontWeight: "700", letterSpacing: -0.2, fontSize: s(12) },
+    hudHint: { color: "#6B6B6B", fontWeight: "500", marginTop: s(4), lineHeight: s(18), fontSize: s(10) },
+    liveWrap: { justifyContent: "flex-start" },
+    livePill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: s(8),
+      paddingVertical: s(8),
+      paddingHorizontal: s(12),
+      borderRadius: 999,
+      backgroundColor: "#EFEFEF",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+    },
+    livePillText: { color: "#111111", fontWeight: "700", letterSpacing: 0.8, fontSize: s(8) },
+    liveDot: { width: s(10), height: s(10), borderRadius: 999 },
+    
+    scoreRow: { flexDirection: "row", marginTop: s(12), gap: s(10) },
+    scoreCard: {
+      flex: 1,
+      minHeight: s(86),
+      borderRadius: s(16),
+      padding: s(12),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+      justifyContent: "space-between",
+    },
+    scoreLabel: { color: "#7A7A7A", fontWeight: "700", letterSpacing: 0.9, fontSize: s(10) },
+    scoreValue: { color: "#111111", fontWeight: "700", marginTop: s(6), fontSize: s(14) },
+    scoreValueSmall: { color: "#111111", fontWeight: "600", marginTop: s(10), fontSize: s(11) },
 
-  hudTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-  },
+    miniStats: { marginTop: s(10), flexDirection: "row", gap: s(10) },
+    miniStat: {
+      flex: 1,
+      borderRadius: s(14),
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    miniStatKey: { color: "#7A7A7A", fontWeight: "700", letterSpacing: 0.7, fontSize: s(11) },
+    miniStatVal: { color: "#111111", fontWeight: "700", fontSize: s(12) },
 
-  titleWrap: {
-    flex: 1,
-    paddingRight: 8,
-  },
+    cta: {
+      marginTop: s(12),
+      borderRadius: s(18),
+      paddingVertical: s(15),
+      paddingHorizontal: s(14),
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    ctaGlow: { position: "absolute", width: s(420), height: s(220), borderRadius: 999, top: s(-120) },
+    ctaText: { color: "#FFFFFF", fontWeight: "700", letterSpacing: 0.8, fontSize: s(12) },
+    ctaSubText: { color: "rgba(255,255,255,0.72)", fontWeight: "500", marginTop: s(6), textAlign: "center", fontSize: s(10) },
 
-  hudTitle: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: -0.2,
-  },
+    quickRow: { flexDirection: "row", marginTop: s(10), gap: s(10) },
+    quickBtn: {
+      flex: 1,
+      minHeight: s(46),
+      paddingVertical: s(12),
+      paddingHorizontal: s(10),
+      borderRadius: s(14),
+      backgroundColor: "#EDEDED",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  hudHint: {
-    color: "#6B6B6B",
-    fontWeight: "500",
-    marginTop: 4,
-    lineHeight: 18,
-  },
-
-  liveWrap: {
-    justifyContent: "flex-start",
-  },
-
-  livePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: "#EFEFEF",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-  },
-
-  livePillText: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 999,
-  },
-
-  scoreRow: {
-    flexDirection: "row",
-    marginTop: 12,
-  },
-
-  scoreCard: {
-    flex: 1,
-    minHeight: 86,
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-    justifyContent: "space-between",
-  },
-
-  scoreLabel: {
-    color: "#7A7A7A",
-    fontWeight: "700",
-    letterSpacing: 0.9,
-    fontSize: 11,
-  },
-
-  scoreValue: {
-    color: "#111111",
-    fontWeight: "700",
-    marginTop: 6,
-  },
-
-  scoreValueSmall: {
-    color: "#111111",
-    fontWeight: "600",
-    marginTop: 10,
-  },
-
-  miniStats: {
-    marginTop: 10,
-    flexDirection: "row",
-  },
-
-  miniStat: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  miniStatKey: {
-    color: "#7A7A7A",
-    fontWeight: "700",
-    letterSpacing: 0.7,
-    fontSize: 11,
-  },
-
-  miniStatVal: {
-    color: "#111111",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-
-  cta: {
-    marginTop: 12,
-    borderRadius: 18,
-    paddingVertical: 15,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-
-  ctaGlow: {
-    position: "absolute",
-    width: 420,
-    height: 220,
-    borderRadius: 999,
-    top: -120,
-  },
-
-  ctaText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-
-  ctaSubText: {
-    color: "rgba(255,255,255,0.72)",
-    fontWeight: "500",
-    marginTop: 6,
-    textAlign: "center",
-  },
-
-  quickRow: {
-    flexDirection: "row",
-    marginTop: 10,
-  },
-
-  quickBtn: {
-    flex: 1,
-    minHeight: 46,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: "#EDEDED",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  quickBtnAlt: {
-    minHeight: 46,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: "#111111",
-    borderWidth: 1,
-    borderColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  quickText: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-
-  quickTextDark: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-});
+    // New Danger Button Styles
+    quickBtnDanger: {
+      flex: 1,
+      minHeight: s(46),
+      paddingVertical: s(12),
+      paddingHorizontal: s(10),
+      borderRadius: s(14),
+      backgroundColor: "rgba(225,85,114,0.08)",
+      borderWidth: 1,
+      borderColor: "rgba(225,85,114,0.28)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    
+    quickText: { color: "#111111", fontWeight: "700", letterSpacing: 0.5, fontSize: s(10) },
+    
+    // Red text to match the End Game theme
+    quickTextDanger: { color: "#C44760", fontWeight: "700", letterSpacing: 0.5, fontSize: s(10) },
+  });

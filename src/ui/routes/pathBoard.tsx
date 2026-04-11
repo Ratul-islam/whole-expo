@@ -9,6 +9,7 @@ import {
   Easing,
   useWindowDimensions,
 } from "react-native";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale"; // <-- Imported
 
 export type HandBit = 0 | 1;
 export type PathStep = [number, HandBit];
@@ -100,16 +101,9 @@ function getBoardLayout(type: BoardType): HoleLayoutItem[] {
 
 function boardMeta(type: BoardType) {
   if (type === "10") {
-    return {
-      title: "NextPeg Lite",
-      rows: 3,
-    };
+    return { title: "NextPeg Lite", rows: 3 };
   }
-
-  return {
-    title: "NextPeg",
-    rows: 5,
-  };
+  return { title: "NextPeg", rows: 5 };
 }
 
 function PulsingGlow({ size }: { size: number }) {
@@ -169,6 +163,9 @@ function SequenceBar({
   path: PathStep[];
   onClear: () => void;
 }) {
+  const scale = useResponsiveScale();
+  const styles = useMemo(() => getResponsiveStyles(scale), [scale]);
+
   if (!path.length) return null;
 
   return (
@@ -205,14 +202,14 @@ export function PathBoard({
   statusText,
 }: Props) {
   const { width } = useWindowDimensions();
+  const scale = useResponsiveScale();
+  const styles = useMemo(() => getResponsiveStyles(scale), [scale]);
 
   const boardType = normalizeBoardType(boardConf);
   const layout = useMemo(() => getBoardLayout(boardType), [boardType]);
   const meta = useMemo(() => boardMeta(boardType), [boardType]);
 
   const total = layout.length;
-  const effectiveTitle = title || meta.title;
-  const effectiveStatus = statusText || `Status : Connected - ${meta.title}`;
 
   const [activeId, setActiveId] = useState<number | null>(null);
 
@@ -250,19 +247,17 @@ export function PathBoard({
       ? layout.find((x) => x.valueIndex === activeId)?.displayId ?? ""
       : "";
 
-  const isSmallPhone = width < 360;
   const isTablet = width >= 768;
-
-  const contentMaxWidth = Math.min(width - (isTablet ? 40 : 24), isTablet ? 720 : 520);
+  const contentMaxWidth = Math.min(width - (isTablet ? scale(40) : scale(24)), isTablet ? scale(720) : scale(520));
 
   const holeSize = useMemo(() => {
     if (boardType === "10") {
-      const usable = contentMaxWidth - 24;
-      return Math.min(74, Math.max(42, usable / 5.2));
+      const usable = contentMaxWidth - scale(24);
+      return Math.min(scale(74), Math.max(scale(42), usable / 5.2));
     }
-    const usable = contentMaxWidth - 24;
-    return Math.min(58, Math.max(58, usable / 8.8));
-  }, [boardType, contentMaxWidth]);
+    const usable = contentMaxWidth - scale(24);
+    return Math.min(scale(58), Math.max(scale(42), usable / 8.8));
+  }, [boardType, contentMaxWidth, scale]);
 
   const gapX = boardType === "10" ? holeSize * 0.22 : holeSize * 0.16;
   const gapY = boardType === "10" ? holeSize * 0.22 : holeSize * 0.22;
@@ -386,19 +381,7 @@ export function PathBoard({
 
   return (
     <View style={styles.wrap}>
-      {/* <Text style={styles.status}>{effectiveStatus}</Text> */}
-      {/* <Text
-        style={[
-          styles.boardTitle,
-          { fontSize: isTablet ? 20 : isSmallPhone ? 16 : 18 },
-        ]}
-      >
-        {effectiveTitle}
-      </Text> */}
-
       <View style={[styles.boardShell, { width: boardPixelWidth, height: boardPixelHeight }]}>
-       
-
         {positioned.map((item) => {
           const selected = selectedMap.get(item.valueIndex);
 
@@ -432,7 +415,7 @@ export function PathBoard({
                 <Text
                   style={[
                     styles.holeText,
-                    { fontSize: isTablet ? 16 : isSmallPhone ? 12 : 14 },
+                    { fontSize: isTablet ? scale(14) : scale(12) },
                     selected && styles.holeTextSelected,
                   ]}
                 >
@@ -522,292 +505,294 @@ export function PathBoard({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    marginTop: 14,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    padding: 14,
-  },
+// --- DYNAMIC STYLES ---
+const getResponsiveStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    wrap: {
+      marginTop: s(14),
+      borderRadius: s(20),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      padding: s(14),
+    },
 
-  status: {
-    color: "#111111",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 10,
-  },
+    status: {
+      color: "#111111",
+      fontSize: s(12),
+      fontWeight: "700",
+      marginBottom: s(10),
+    },
 
-  boardTitle: {
-    color: "#111111",
-    fontWeight: "500",
-    marginBottom: 14,
-  },
+    boardTitle: {
+      color: "#111111",
+      fontWeight: "500",
+      marginBottom: s(14),
+    },
 
-  boardShell: {
-    alignSelf: "center",
-    position: "relative",
-  },
+    boardShell: {
+      alignSelf: "center",
+      position: "relative",
+    },
 
-  liteOutline: {
-    position: "absolute",
-    borderWidth: 1,
-    borderColor: "#3A3A3A",
-  },
+    liteOutline: {
+      position: "absolute",
+      borderWidth: 1,
+      borderColor: "#3A3A3A",
+    },
 
-  liteDiagonalTop: {
-    position: "absolute",
-    height: 1,
-    backgroundColor: "#3A3A3A",
-    transform: [{ rotate: "-54deg" }],
-  },
+    liteDiagonalTop: {
+      position: "absolute",
+      height: 1,
+      backgroundColor: "#3A3A3A",
+      transform: [{ rotate: "-54deg" }],
+    },
 
-  liteDiagonalBottom: {
-    position: "absolute",
-    height: 1,
-    backgroundColor: "#3A3A3A",
-    transform: [{ rotate: "54deg" }],
-  },
+    liteDiagonalBottom: {
+      position: "absolute",
+      height: 1,
+      backgroundColor: "#3A3A3A",
+      transform: [{ rotate: "54deg" }],
+    },
 
-  ledPanel: {
-    position: "absolute",
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    ledPanel: {
+      position: "absolute",
+      backgroundColor: "#111111",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  ledPanelText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "500",
-    textAlign: "center",
-    lineHeight: 13,
-  },
+    ledPanelText: {
+      color: "#FFFFFF",
+      fontSize: s(11),
+      fontWeight: "500",
+      textAlign: "center",
+      lineHeight: s(13),
+    },
 
-  holeWrap: {
-    position: "absolute",
-  },
+    holeWrap: {
+      position: "absolute",
+    },
 
-  hole: {
-    backgroundColor: "#D9D9D9",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "visible",
-  },
+    hole: {
+      backgroundColor: "#D9D9D9",
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "visible",
+    },
 
-  holeSelected: {
-    borderWidth: 2,
-    borderColor: "#3B82F6",
-    backgroundColor: "#CFCFCF",
-  },
+    holeSelected: {
+      borderWidth: 2,
+      borderColor: "#3B82F6",
+      backgroundColor: "#CFCFCF",
+    },
 
-  holeText: {
-    color: "#111111",
-    fontWeight: "700",
-  },
+    holeText: {
+      color: "#111111",
+      fontWeight: "700",
+    },
 
-  holeTextSelected: {
-    textDecorationLine: "underline",
-  },
+    holeTextSelected: {
+      textDecorationLine: "underline",
+    },
 
-  badge: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 4,
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    badge: {
+      position: "absolute",
+      top: s(-6),
+      right: s(-6),
+      minWidth: s(18),
+      height: s(18),
+      borderRadius: s(9),
+      paddingHorizontal: s(4),
+      backgroundColor: "#111111",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
+    badgeText: {
+      color: "#FFFFFF",
+      fontSize: s(10),
+      fontWeight: "700",
+    },
 
-  handBadge: {
-    position: "absolute",
-    bottom: -6,
-    paddingHorizontal: 6,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    handBadge: {
+      position: "absolute",
+      bottom: s(-6),
+      paddingHorizontal: s(6),
+      height: s(18),
+      borderRadius: s(9),
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  handLeft: {
-    backgroundColor: "#2563EB",
-  },
+    handLeft: {
+      backgroundColor: "#2563EB",
+    },
 
-  handRight: {
-    backgroundColor: "#D97706",
-  },
+    handRight: {
+      backgroundColor: "#ff0000",
+    },
 
-  handBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
+    handBadgeText: {
+      color: "#FFFFFF",
+      fontSize: s(10),
+      fontWeight: "700",
+    },
 
-  hint: {
-    marginTop: 14,
-    color: "#6B6B6B",
-    fontSize: 13,
-  },
+    hint: {
+      marginTop: s(14),
+      color: "#6B6B6B",
+      fontSize: s(10),
+    },
 
-  sequenceWrap: {
-    marginTop: 14,
-    backgroundColor: "#F7F7F7",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-    padding: 12,
-  },
+    sequenceWrap: {
+      marginTop: s(14),
+      backgroundColor: "#F7F7F7",
+      borderRadius: s(16),
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+      padding: s(12),
+    },
 
-  sequenceHead: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
+    sequenceHead: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: s(8),
+    },
 
-  sequenceTitle: {
-    color: "#111111",
-    fontSize: 13,
-    fontWeight: "700",
-  },
+    sequenceTitle: {
+      color: "#111111",
+      fontSize: s(11),
+      fontWeight: "700",
+    },
 
-  sequenceClear: {
-    color: "#C44760",
-    fontWeight: "700",
-    fontSize: 12,
-  },
+    sequenceClear: {
+      color: "#C44760",
+      fontWeight: "700",
+      fontSize: s(12),
+    },
 
-  sequenceTrack: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-  },
+    sequenceTrack: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      gap: s(6),
+    },
 
-  sequenceItem: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    sequenceItem: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
 
-  sequenceNode: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    sequenceNode: {
+      width: s(28),
+      height: s(28),
+      borderRadius: s(14),
+      backgroundColor: "#111111",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  sequenceNodeText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 12,
-  },
+    sequenceNodeText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: s(12),
+    },
 
-  sequenceHand: {
-    marginLeft: 4,
-    color: "#6B6B6B",
-    fontSize: 11,
-    fontWeight: "700",
-  },
+    sequenceHand: {
+      marginLeft: s(4),
+      color: "#6B6B6B",
+      fontSize: s(11),
+      fontWeight: "700",
+    },
 
-  sequenceArrow: {
-    marginHorizontal: 6,
-    color: "#999999",
-    fontWeight: "700",
-  },
+    sequenceArrow: {
+      marginHorizontal: s(6),
+      color: "#999999",
+      fontWeight: "700",
+    },
 
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center",
-    padding: 20,
-  },
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      justifyContent: "center",
+      padding: s(20),
+    },
 
-  modalCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    padding: 18,
-  },
+    modalCard: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: s(20),
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      padding: s(18),
+    },
 
-  modalTitle: {
-    color: "#111111",
-    fontSize: 18,
-    fontWeight: "700",
-  },
+    modalTitle: {
+      color: "#111111",
+      fontSize: s(14),
+      fontWeight: "700",
+    },
 
-  modalSub: {
-    color: "#6B6B6B",
-    fontSize: 13,
-    marginTop: 4,
-    marginBottom: 14,
-  },
+    modalSub: {
+      color: "#6B6B6B",
+      fontSize: s(11),
+      marginTop: s(4),
+      marginBottom: s(14),
+    },
 
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-  },
+    modalActions: {
+      flexDirection: "row",
+      gap: s(10),
+    },
 
-  handBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    handBtn: {
+      flex: 1,
+      height: s(48),
+      borderRadius: s(14),
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  leftBtn: {
-    backgroundColor: "#2563EB",
-  },
+    leftBtn: {
+      backgroundColor: "#2563EB",
+    },
 
-  rightBtn: {
-    backgroundColor: "#D97706",
-  },
+    rightBtn: {
+      backgroundColor: "#ff0000",
+    },
 
-  handBtnText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "700",
-  },
+    handBtnText: {
+      color: "#FFFFFF",
+      fontSize: s(12),
+      fontWeight: "700",
+    },
 
-  removeBtn: {
-    marginTop: 12,
-    height: 46,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(225,85,114,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(225,85,114,0.25)",
-  },
+    removeBtn: {
+      marginTop: s(12),
+      height: s(46),
+      borderRadius: s(14),
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "rgba(225,85,114,0.08)",
+      borderWidth: 1,
+      borderColor: "rgba(225,85,114,0.25)",
+    },
 
-  removeBtnText: {
-    color: "#C44760",
-    fontWeight: "700",
-  },
+    removeBtnText: {
+      color: "#C44760",
+      fontWeight: "700",
+    },
 
-  closeBtn: {
-    marginTop: 10,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    closeBtn: {
+      marginTop: s(10),
+      height: s(44),
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  closeBtnText: {
-    color: "#444444",
-    fontWeight: "700",
-  },
-});
+    closeBtnText: {
+      color: "#444444",
+      fontWeight: "700",
+    },
+  });

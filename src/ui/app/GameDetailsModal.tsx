@@ -11,6 +11,11 @@ import {
 
 export type GameDetails = {
   _id?: string;
+  userId: {
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
   sessionId?: string;
   status?: string;
   score?: number;
@@ -71,6 +76,8 @@ export function GameDetailsModal({
     [isSmallPhone, isTablet]
   );
 
+
+  console.log(game)
   const scale = useRef(new Animated.Value(0.92)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -139,9 +146,9 @@ export function GameDetailsModal({
                   </Text>
 
                   <Text style={s.sub} numberOfLines={1}>
-                    {game?.sessionId
-                      ? `Session ${game.sessionId}`
-                      : "Session —"}
+                    {game?.userId?.firstName
+                      ? `${game.userId.firstName + " " + game.userId.lastName }`
+                      : ""}
                   </Text>
                 </View>
 

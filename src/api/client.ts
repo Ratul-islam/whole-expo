@@ -75,6 +75,7 @@ api.interceptors.request.use(async (config) => {
   console.log("➡️ API REQUEST:", config.method?.toUpperCase(), fullUrl);
 
   const access = await tokenStorage.getAccess();
+  console.log(access)
   if (access) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${access}`;

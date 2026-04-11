@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
 
 export function MainHeader({
   deviceText,
@@ -8,6 +9,9 @@ export function MainHeader({
   deviceText: string;
   onLogout: () => void;
 }) {
+  const scaleHook = useResponsiveScale();
+  const ui = useMemo(() => getHeaderStyles(scaleHook), [scaleHook]);
+
   return (
     <View style={ui.headerRow}>
       <View>
@@ -32,52 +36,54 @@ export function MainHeader({
   );
 }
 
-const ui = StyleSheet.create({
-  headerRow: {
-    marginTop: 6,
-    marginBottom: 18,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
+const getHeaderStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    headerRow: {
+      marginTop: s(6),
+      marginBottom: s(18),
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+    },
 
-  brand: {
-    color: "#111111",
-    fontWeight: "900",
-    fontSize: 22,
-    letterSpacing: 1,
-  },
+    brand: {
+      color: "#111111",
+      fontWeight: "900",
+      fontSize: s(14),
+      letterSpacing: 1,
+    },
 
-  subtitle: {
-    color: "#6B6B6B",
-    fontWeight: "600",
-    marginTop: 2,
-  },
+    subtitle: {
+      color: "#6B6B6B",
+      fontWeight: "600",
+      marginTop: s(2),
+      fontSize: s(11),
+    },
 
-  right: {
-    alignItems: "flex-end",
-  },
+    right: {
+      alignItems: "flex-end",
+    },
 
-  miniTag: {
-    color: "#8A8A8A",
-    fontWeight: "700",
-    fontSize: 12,
-    letterSpacing: 0.8,
-  },
+    miniTag: {
+      color: "#8A8A8A",
+      fontWeight: "700",
+      fontSize: s(10),
+      letterSpacing: 0.8,
+    },
 
-  logoutBtn: {
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: "#EDEDED",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-  },
+    logoutBtn: {
+      marginTop: s(8),
+      paddingVertical: s(8),
+      paddingHorizontal: s(14),
+      borderRadius: s(12),
+      backgroundColor: "#EDEDED",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+    },
 
-  logoutText: {
-    color: "#111111",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-});
+    logoutText: {
+      color: "#111111",
+      fontWeight: "700",
+      fontSize: s(11),
+    },
+  });

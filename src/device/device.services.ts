@@ -1,7 +1,7 @@
 // src/device/device.services.ts
 import { api } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
-import { loadPresetType, statusUpdateType } from "./device.types";
+import { endGameType, loadPresetType, statusUpdateType } from "./device.types";
 
 type LiveHandlers = {
   onOpen?: () => void;
@@ -27,7 +27,9 @@ export const deviceService = {
     return data;
   },
   loadPreset:async (payload:loadPresetType)=>{
+    console.log(payload)
     const { data } = await api.post(ENDPOINTS.DEVICE.LOADPRST,payload );
+    
     return data;
   },
   startGame:async (payload:statusUpdateType)=>{
@@ -40,6 +42,10 @@ export const deviceService = {
   },
   resumeGame:async (payload:statusUpdateType)=>{
     const { data } = await api.post(ENDPOINTS.DEVICE.RESUMEGAME,payload );
+    return data;
+  },
+  endGame:async (payload:endGameType)=>{
+    const { data } = await api.post(ENDPOINTS.DEVICE.ENDGAME,payload );
     return data;
   },
   live: (token: string, handlers: LiveHandlers = {}) => {

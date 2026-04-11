@@ -7,7 +7,8 @@ import { useAuthStore } from "../../src/auth/auth.store";
 import { sessionService } from "@/src/session/session.services";
 import { useDeviceLive } from "@/hooks/useDeviceLive";
 import type { RecentSession, SessionStatus } from "@/src/ui/home/RecentRuns";
-import type { DevicePhase } from "@/src/ui/home/StatusOrb";
+import type { DevicePhase } from "@/src/ui/home/HudPanel";
+
 import { MainHeader } from "@/src/ui/home/MainHeader";
 import { StatusOrb } from "@/src/ui/home/StatusOrb";
 import { HudPanel } from "@/src/ui/home/HudPanel";
@@ -17,6 +18,7 @@ import type { GameDetails } from "@/src/ui/app/GameDetailsModal";
 import { deviceService } from "@/src/device/device.services";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const globalShownSessions = new Set<string>();
 
 async function fetchRecentSessions(): Promise<any[]> {
   const res: any = await sessionService.getCompletedSessions();
@@ -51,6 +53,7 @@ function toPhase(device: any): DevicePhase {
   if (st === "preset_loaded") return "PRESET_LOADED";
   if (st === "in_game") return "IN_GAME";
   if (st === "paused") return "PAUSED";
+  
   if (st === "completed") return "COMPLETED";
   if (st === "abandoned") return "ABANDONED";
 
@@ -71,6 +74,8 @@ export default function MainMenuScreen() {
   const renderCount = useRef(0);
   renderCount.current += 1;
 
+  const prevStatusRef = useRef<string | null>(null);
+
   useEffect(() => {
     console.log("[INDEX] deviceRev changed →", deviceRev, {
       status: device?.sessionId?.status,
@@ -81,13 +86,6 @@ export default function MainMenuScreen() {
       updatedAt: device?.sessionId?.updatedAt,
     });
   }, [deviceRev, device]);
-
-  console.log("[INDEX] render#", renderCount.current, {
-    deviceId: device?.deviceId,
-    wsOnline,
-    deviceRev,
-    score: device?.sessionId?.score,
-  });
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -141,7 +139,7 @@ export default function MainMenuScreen() {
           endedAt: x.endedAt ?? x.ended_at,
           time: x.time ?? x.time,
           createdAt: x.createdAt ?? x.created_at,
-          pathName: x.pathName ?? x.path_name ?? x.path?.name ?? x.path?.meta?.name,
+          pathName: x.pathId.name
         }))
       );
     } catch (e: any) {
@@ -150,6 +148,41 @@ export default function MainMenuScreen() {
     }
   };
 
+  useEffect(() => {
+    const sess = device?.sessionId;
+    const currentStatus = sess?.status;
+    const sessId = String(sess?._id || sess?.sessionId || "");
+    
+    const justEnded = 
+      currentStatus === "completed" && 
+      prevStatusRef.current !== null && 
+      prevStatusRef.current !== "completed";
+
+    if (justEnded && sessId && !globalShownSessions.has(sessId)) {
+      globalShownSessions.add(sessId); 
+
+      setDetailsGame({
+        sessionId: sessId,
+        deviceId: device?.deviceId || "",
+        status: "completed",
+        score: sess?.score ?? 0,
+        correct: sess?.correct ?? 0,
+        wrong: sess?.wrong ?? 0,
+        time: sess?.time ?? 0,
+      } as any);
+
+      setDetailsOpen(true);
+      
+      loadSessions();
+    }
+
+    if (currentStatus !== undefined) {
+      prevStatusRef.current = currentStatus as string;
+    }
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [device]);
+  
   const loadAll = async () => {
     console.log("[INDEX] loadAll() start");
     await Promise.all([refreshDevice(), loadSessions()]);
@@ -199,13 +232,33 @@ export default function MainMenuScreen() {
 
   const onScan = () => router.push("/(app)/scanner");
 
+  const onEndGame = async () => {
+    if (!device?.deviceId || !device?.deviceSecret) return;
+
+    try {
+      setActionLoading(true);
+
+      await deviceService.endGame({
+        deviceId: device.deviceId,
+        deviceSecret: device.deviceSecret,
+      });
+
+      await refreshDevice();
+      connectWsIfConnected();
+    } catch (e: any) {
+      console.log("End Game Error:", e);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const onLoadPreset = () => {
     if (!device?.deviceId || !device?.deviceSecret) {
       onScan();
       return;
     }
 
-    router.push({
+    router.replace({
       pathname: "/(app)/my-routes",
       params: {
         deviceId: device.deviceId,
@@ -282,6 +335,11 @@ export default function MainMenuScreen() {
       return;
     }
 
+    if (phase === "COMPLETED") {
+      onScan();
+      return;
+    }
+
     if (!device?.deviceId || !device?.deviceSecret) {
       onScan();
       return;
@@ -310,84 +368,81 @@ export default function MainMenuScreen() {
   const deviceText = connected ? `DEVICE ${device?.deviceId ?? "—"}` : "NO DEVICE";
   const lastPlayedText = lastPlayed ? formatTinyTime(lastPlayed) : "—";
 
-return (
-  <>
-    <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
 
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor="#000"
-        />
-      }
-    >
-      <View style={styles.inner}>
+  return (
+    <SafeAreaView>
+      <StatusBar barStyle="dark-content" backgroundColor="#F4F4F4" />
 
-        <MainHeader deviceText={deviceText} onLogout={onLogout} />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#000"
+          />
+        }
+      >
+        <View style={styles.inner}>
 
-        <StatusOrb
-          key={`orb-${deviceRev}`}
-          phase={phase}
-          deviceId={device?.deviceId}
-          session={device?.sessionId}
-          wsOnline={wsOnline && connected}
-        />
+          <MainHeader deviceText={deviceText} onLogout={onLogout} />
 
-        <HudPanel
-          key={`hud-${deviceRev}`}
-          phase={phase}
-          control={device?.sessionId?.control}
-          connected={connected}
-          wsOnline={wsOnline}
-          totalScore={totalScore}
-          liveScore={phase === "IN_GAME" ? liveScore : "—"}
-          lastPlayedText={lastPlayedText}
-          liveCorrect={liveCorrect}
-          liveWrong={liveWrong}
-          onPrimary={onPrimary}
-          onRoutes={() => router.push("/(app)/my-routes")}
-          onLeaderboard={() => router.push("/(app)/leaderBoard")}
-          onScan={onScan}
-        />
+          <StatusOrb
+            key={`orb-${deviceRev}`}
+            phase={phase}
+            deviceId={device?.deviceId}
+            session={device?.sessionId}
+            wsOnline={wsOnline && connected}
+          />
 
-        <RecentRuns
-          loading={loading}
-          err={err}
-          completed={completed}
-          onRetry={loadAll}
-          onPressItem={(g) => {
-            setDetailsGame(g as any);
-            setDetailsOpen(true);
-          }}
-          formatTime={formatTinyTime}
-        />
+          <HudPanel
+            key={`hud-${deviceRev}`}
+            phase={phase}
+            control={device?.sessionId?.control}
+            connected={connected}
+            wsOnline={wsOnline}
+            totalScore={totalScore}
+            liveScore={phase === "IN_GAME" ? liveScore : "—"}
+            lastPlayedText={lastPlayedText}
+            liveCorrect={liveCorrect}
+            liveWrong={liveWrong}
+            onPrimary={onPrimary}
+            onRoutes={() => router.push("/(app)/my-routes")}
+            onLeaderboard={() => router.push("/(app)/leaderBoard")}
+            onScan={onEndGame} 
+          />
 
-        <View style={{ height: 30 }} />
+          <RecentRuns
+            loading={loading}
+            err={err}
+            completed={completed}
+            onRetry={loadAll}
+            onPressItem={(g) => {
+              setDetailsGame(g as any);
+              setDetailsOpen(true);
+            }}
+            formatTime={formatTinyTime}
+          />
 
-        <GameDetailsModal
-          visible={detailsOpen}
-          game={detailsGame}
-          onClose={() => {
-            setDetailsOpen(false);
-            setDetailsGame(null);
-          }}
-          showDeviceSecret={false}
-        />
-      </View>
-    </ScrollView>
-  </>
-);
+          <View style={{ height: 30 }} />
+
+          <GameDetailsModal
+            visible={detailsOpen}
+            game={detailsGame}
+            onClose={() => {
+              setDetailsOpen(false);
+              setDetailsGame(null);
+            }}
+            showDeviceSecret={false}
+          />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
-  bottomSpacer: {
-    height: 28,
-  },
-
   safe: {
     flex: 1,
     backgroundColor: "#F4F4F4",
@@ -395,9 +450,7 @@ const styles = StyleSheet.create({
 
   scrollContent: {
     flexGrow: 1,
-    justifyContent: "center",
     paddingHorizontal: 24,
-    paddingTop: 30,
     paddingBottom: 40,
   },
 

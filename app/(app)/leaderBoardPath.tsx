@@ -16,12 +16,22 @@ import { ScreenLayout } from "@/src/ui/app/screenLayout";
 import StatusCard from "@/src/ui/leaderboard/StatusCard";
 import { pathService } from "@/src/path/path.services";
 import { PathBoardViewer } from "@/src/ui/profile/PathBoardViewer";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
+
+import { GameDetailsModal } from "@/src/ui/app/GameDetailsModal";
+import { tokenStorage } from "@/src/lib/tokenStorage";
+import { getUserFromToken } from "@/src/lib/jwt-decode";
 
 type HandBit = 0 | 1;
 type PathStep = [number, HandBit];
 
 type MatchItem = {
   _id?: string;
+  userId?:{
+    _id: string;
+    firstName: string;
+    lastName:string;
+  }; 
   sessionId?: string;
   score?: number;
   correct?: number;
@@ -44,7 +54,6 @@ type PathModel = {
     _id?: string;
     firstName?: string;
     lastName?: string;
-    email?: string;
   };
 };
 
@@ -73,7 +82,7 @@ function normalizeBoardConf(value?: string | number): "10" | "20" {
 }
 
 function getBoardDisplayName(boardConf?: string | number) {
-  return normalizeBoardConf(boardConf) === "10" ? "NextPeg Lite" : "NextPeq";
+  return normalizeBoardConf(boardConf) === "10" ? "NextPeg Lite" : "NextPeg";
 }
 
 function formatDate(value?: string) {
@@ -107,11 +116,15 @@ export default function PathDetailsScreen() {
   const params = useLocalSearchParams<{ pathId?: string }>();
   const { width } = useWindowDimensions();
 
+  // --- DYNAMIC SCALING ---
+  const scale = useResponsiveScale();
+  const s = useMemo(() => getResponsiveStyles(scale), [scale]);
+
   const isTablet = width >= 768;
-  const ui = {
-    pad: isTablet ? 20 : 16,
-    radius: isTablet ? 18 : 16,
-  };
+  const ui = useMemo(() => ({
+    pad: isTablet ? scale(20) : scale(16),
+    radius: isTablet ? scale(18) : scale(16),
+  }), [isTablet, scale]);
 
   const pathId = useMemo(
     () => (typeof params.pathId === "string" ? params.pathId : ""),
@@ -124,6 +137,7 @@ export default function PathDetailsScreen() {
   const [saving, setSaving] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
+  const [token, setToken]= useState<string|null>();
   const [path, setPath] = useState<PathModel | null>(null);
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [meta, setMeta] = useState<MatchesMeta>({
@@ -135,7 +149,8 @@ export default function PathDetailsScreen() {
     hasPrev: false,
   });
 
-  const [viewerOpen, setViewerOpen] = useState(true);
+  const [viewerOpen, setViewerOpen] = useState(false); 
+  const [selectedMatch, setSelectedMatch] = useState<MatchItem | null>(null);
 
   const loadDetails = async (opts?: { page?: number; append?: boolean; silent?: boolean }) => {
     const nextPage = opts?.page ?? 1;
@@ -153,6 +168,10 @@ export default function PathDetailsScreen() {
       if (!append) {
         setErrorText(null);
       }
+ const token = await tokenStorage.getAccess();
+if(!token) return;
+ 
+setToken(getUserFromToken(token)?.id)
 
       const res = await pathService.getSinglePath({
         pathId,
@@ -198,6 +217,7 @@ export default function PathDetailsScreen() {
     loadDetails({ page: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathId]);
+
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -247,7 +267,7 @@ export default function PathDetailsScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#111111" />
           }
-          contentContainerStyle={{ paddingHorizontal: ui.pad, paddingBottom: 34 }}
+          contentContainerStyle={{ paddingHorizontal: ui.pad, paddingBottom: scale(34) }}
         >
           {loading ? (
             <View style={s.loadingWrap}>
@@ -269,7 +289,7 @@ export default function PathDetailsScreen() {
             <>
               <View style={s.heroCard}>
                 <Text style={s.kicker}>Path Details</Text>
-                <Text style={s.title}>{path.name || "Untitled Path"}</Text>
+                <Text style={s.title}>{path.name || "Untitled Path"} by {path.userId?.firstName +" "+ path.userId?.lastName }</Text>
                 <Text style={s.subtitle}>
                   {getBoardDisplayName(path.boardConf)} • {path.path?.length ?? 0} steps
                 </Text>
@@ -287,9 +307,11 @@ export default function PathDetailsScreen() {
                     </Text>
                   </View>
 
+{
+  token === path?.userId?._id ? "":
                   <Pressable
-                    onPress={onSavePath}
-                    disabled={saving}
+                  onPress={onSavePath}
+                  disabled={saving}
                     style={({ pressed }) => [
                       s.saveBtn,
                       pressed && { opacity: 0.85 },
@@ -302,6 +324,7 @@ export default function PathDetailsScreen() {
                       <Text style={s.saveBtnText}>Save Path</Text>
                     )}
                   </Pressable>
+              }
                 </View>
               </View>
 
@@ -374,27 +397,33 @@ export default function PathDetailsScreen() {
                 ) : (
                   <>
                     <View style={s.matchList}>
-                      {matches.map((match, index) => (
-                        <View
-                          key={match._id || match.sessionId || `match-${index}`}
-                          style={s.matchCard}
-                        >
-                          <View style={s.matchTopRow}>
-                            <Text style={s.matchStatus}>
-                              {(match.status || "unknown").toUpperCase()}
+                      {matches.map((match, index) => {
+                        return (
+                          <Pressable
+                            key={match._id || match.sessionId || `match-${index}`}
+                            style={({ pressed }) => [
+                              s.matchCard,
+                              pressed && { opacity: 0.7 } 
+                            ]}
+                            onPress={() => setSelectedMatch(match)}
+                          >
+                            <View style={s.matchTopRow}>
+                              <Text style={s.matchStatus}>
+                                {(match?.userId?.firstName || "unknown").toUpperCase()}
+                              </Text>
+                              <Text style={s.matchScore}>{safeNum(match.score)} pts</Text>
+                            </View>
+
+                            <Text style={s.matchMeta}>
+                              Time: {formatDuration(match.time)} • Correct: {safeNum(match.correct)} • Wrong: {safeNum(match.wrong)}
                             </Text>
-                            <Text style={s.matchScore}>{safeNum(match.score)} pts</Text>
-                          </View>
 
-                          <Text style={s.matchMeta}>
-                            Time: {formatDuration(match.time)} • Correct: {safeNum(match.correct)} • Wrong: {safeNum(match.wrong)}
-                          </Text>
-
-                          <Text style={s.matchDate}>
-                            {formatDate(match.endedAt || match.createdAt)}
-                          </Text>
-                        </View>
-                      ))}
+                            <Text style={s.matchDate}>
+                              {formatDate(match.endedAt || match.createdAt)}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
                     </View>
 
                     {meta.hasNext ? (
@@ -430,330 +459,348 @@ export default function PathDetailsScreen() {
             canSave={false}
           />
         ) : null}
+
+        <GameDetailsModal
+          visible={!!selectedMatch}
+          game={selectedMatch as any} 
+          onClose={() => setSelectedMatch(null)}
+          onScanAgainLabel="CLOSE"
+        />
       </View>
     </ScreenLayout>
   );
 }
 
-const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
+// --- DYNAMIC STYLES ---
+const getResponsiveStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: "#FFFFFF",
+    },
 
-  topBar: {
-    marginTop: 10,
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-  },
+    topBar: {
+      marginTop: s(10),
+      marginBottom: s(8),
+      flexDirection: "row",
+      alignItems: "center",
+    },
 
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    backgroundColor: "#F7F7F7",
-  },
+    backBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: s(8),
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      backgroundColor: "#F7F7F7",
+    },
 
-  backIcon: {
-    color: "#111111",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+    backIcon: {
+      color: "#111111",
+      fontSize: s(11),
+      fontWeight: "700",
+    },
 
-  backText: {
-    color: "#111111",
-    fontWeight: "700",
-  },
+    backText: {
+      color: "#111111",
+      fontWeight: "700",
+      fontSize: s(10),
+    },
 
-  loadingWrap: {
-    paddingTop: 40,
-    alignItems: "center",
-    gap: 12,
-  },
+    loadingWrap: {
+      paddingTop: s(40),
+      alignItems: "center",
+      gap: s(12),
+    },
 
-  loadingText: {
-    color: "#6B6B6B",
-    fontWeight: "500",
-  },
+    loadingText: {
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(10),
+    },
 
-  heroCard: {
-    borderRadius: 22,
-    padding: 18,
-    backgroundColor: "#F7F7F7",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-    marginTop: 6,
-  },
+    heroCard: {
+      borderRadius: s(22),
+      padding: s(18),
+      backgroundColor: "#F7F7F7",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+      marginTop: s(6),
+    },
 
-  kicker: {
-    color: "#6B6B6B",
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.1,
-    textTransform: "uppercase",
-  },
+    kicker: {
+      color: "#6B6B6B",
+      fontSize: s(10),
+      fontWeight: "700",
+      letterSpacing: 1.1,
+      textTransform: "uppercase",
+    },
 
-  title: {
-    marginTop: 8,
-    color: "#111111",
-    fontSize: 26,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-  },
+    title: {
+      marginTop: s(8),
+      color: "#111111",
+      fontSize: s(18),
+      fontWeight: "700",
+      letterSpacing: -0.3,
+    },
 
-  subtitle: {
-    marginTop: 8,
-    color: "#6B6B6B",
-    fontSize: 14,
-    fontWeight: "500",
-  },
+    subtitle: {
+      marginTop: s(8),
+      color: "#6B6B6B",
+      fontSize: s(10),
+      fontWeight: "500",
+    },
 
-  badgeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginTop: 14,
-  },
+    badgeRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: s(10),
+      marginTop: s(14),
+    },
 
-  badge: {
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
+    badge: {
+      paddingVertical: s(9),
+      paddingHorizontal: s(12),
+      borderRadius: s(14),
+      borderWidth: 1,
+    },
 
-  badgeDark: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
+    badgeDark: {
+      backgroundColor: "#111111",
+      borderColor: "#111111",
+    },
 
-  badgeLight: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#D9D9D9",
-    borderWidth: 1,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-  },
+    badgeLight: {
+      backgroundColor: "#FFFFFF",
+      borderColor: "#D9D9D9",
+      borderWidth: 1,
+      paddingVertical: s(9),
+      paddingHorizontal: s(12),
+      borderRadius: s(14),
+    },
 
-  badgeText: {
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    fontSize: 12,
-  },
+    badgeText: {
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      fontSize: s(10),
+    },
 
-  badgeTextDark: {
-    color: "#FFFFFF",
-  },
+    badgeTextDark: {
+      color: "#FFFFFF",
+    },
 
-  badgeTextLight: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    fontSize: 12,
-  },
+    badgeTextLight: {
+      color: "#111111",
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      fontSize: s(10),
+    },
 
-  saveBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: "#111111",
-    borderWidth: 1,
-    borderColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 104,
-  },
+    saveBtn: {
+      paddingVertical: s(10),
+      paddingHorizontal: s(14),
+      borderRadius: s(14),
+      backgroundColor: "#111111",
+      borderWidth: 1,
+      borderColor: "#111111",
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: s(104),
+    },
 
-  saveBtnText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 12,
-  },
+    saveBtnText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: s(10),
+    },
 
-  sectionCard: {
-    marginTop: 14,
-    borderRadius: 20,
-    padding: 16,
-    backgroundColor: "#F7F7F7",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-  },
+    sectionCard: {
+      marginTop: s(14),
+      borderRadius: s(20),
+      padding: s(16),
+      backgroundColor: "#F7F7F7",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+    },
 
-  sectionTitle: {
-    color: "#111111",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+    sectionTitle: {
+      color: "#111111",
+      fontSize: s(11),
+      fontWeight: "700",
+    },
 
-  sectionHeadRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+    sectionHeadRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: s(10),
+    },
 
-  previewBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: "#111111",
-    borderWidth: 1,
-    borderColor: "#111111",
-  },
+    previewBtn: {
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      borderRadius: s(14),
+      backgroundColor: "#111111",
+      borderWidth: 1,
+      borderColor: "#111111",
+    },
 
-  previewBtnText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 12,
-  },
+    previewBtnText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: s(10),
+    },
 
-  previewHint: {
-    marginTop: 10,
-    color: "#6B6B6B",
-    fontWeight: "500",
-    lineHeight: 20,
-  },
+    previewHint: {
+      marginTop: s(10),
+      color: "#6B6B6B",
+      fontWeight: "500",
+      lineHeight: s(20),
+      fontSize: s(11),
+    },
 
-  statsRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
+    statsRow: {
+      marginTop: s(14),
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: s(10),
+    },
 
-  statBox: {
-    flexGrow: 1,
-    minWidth: 120,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-  },
+    statBox: {
+      flexGrow: 1,
+      minWidth: s(120),
+      borderRadius: s(16),
+      paddingVertical: s(14),
+      paddingHorizontal: s(14),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+    },
 
-  statValue: {
-    color: "#111111",
-    fontSize: 20,
-    fontWeight: "700",
-  },
+    statValue: {
+      color: "#111111",
+      fontSize: s(20),
+      fontWeight: "700",
+    },
 
-  statLabel: {
-    marginTop: 4,
-    color: "#6B6B6B",
-    fontSize: 12,
-    fontWeight: "500",
-  },
+    statLabel: {
+      marginTop: s(4),
+      color: "#6B6B6B",
+      fontSize: s(10),
+      fontWeight: "500",
+    },
 
-  metaList: {
-    marginTop: 14,
-    gap: 10,
-  },
+    metaList: {
+      marginTop: s(14),
+      gap: s(10),
+    },
 
-  metaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
+    metaRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: s(12),
+    },
 
-  metaKey: {
-    color: "#6B6B6B",
-    fontWeight: "600",
-    flex: 0.9,
-  },
+    metaKey: {
+      color: "#6B6B6B",
+      fontWeight: "600",
+      flex: 0.9,
+      fontSize: s(11),
+    },
 
-  metaVal: {
-    color: "#111111",
-    fontWeight: "600",
-    flex: 1.2,
-    textAlign: "right",
-  },
+    metaVal: {
+      color: "#111111",
+      fontWeight: "600",
+      flex: 1.2,
+      textAlign: "right",
+      fontSize: s(11),
+    },
 
-  emptyText: {
-    marginTop: 12,
-    color: "#6B6B6B",
-    fontWeight: "500",
-  },
+    emptyText: {
+      marginTop: s(12),
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(10),
+    },
 
-  matchList: {
-    marginTop: 12,
-    gap: 10,
-  },
+    matchList: {
+      marginTop: s(12),
+      gap: s(10),
+    },
 
-  matchCard: {
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-  },
+    matchCard: {
+      borderRadius: s(16),
+      padding: s(14),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+    },
 
-  matchTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-    alignItems: "center",
-  },
+    matchTopRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: s(10),
+      alignItems: "center",
+    },
 
-  matchStatus: {
-    color: "#111111",
-    fontWeight: "700",
-    fontSize: 12,
-    letterSpacing: 0.8,
-  },
+    matchStatus: {
+      color: "#111111",
+      fontWeight: "700",
+      fontSize: s(10),
+      letterSpacing: 0.8,
+    },
 
-  matchScore: {
-    color: "#111111",
-    fontWeight: "700",
-    fontSize: 14,
-  },
+    matchScore: {
+      color: "#111111",
+      fontWeight: "700",
+      fontSize: s(10),
+    },
 
-  matchMeta: {
-    marginTop: 8,
-    color: "#6B6B6B",
-    fontWeight: "500",
-  },
+    matchMeta: {
+      marginTop: s(8),
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(11),
+    },
 
-  matchDate: {
-    marginTop: 6,
-    color: "#8A8A8A",
-    fontWeight: "500",
-    fontSize: 12,
-  },
+    matchDate: {
+      marginTop: s(6),
+      color: "#8A8A8A",
+      fontWeight: "500",
+      fontSize: s(10),
+    },
 
-  loadMoreBtn: {
-    marginTop: 14,
-    alignSelf: "center",
-    minWidth: 170,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: "#111111",
-    borderWidth: 1,
-    borderColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    loadMoreBtn: {
+      marginTop: s(14),
+      alignSelf: "center",
+      minWidth: s(170),
+      paddingVertical: s(12),
+      paddingHorizontal: s(16),
+      borderRadius: s(14),
+      backgroundColor: "#111111",
+      borderWidth: 1,
+      borderColor: "#111111",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  loadMoreBtnDisabled: {
-    opacity: 0.65,
-  },
+    loadMoreBtnDisabled: {
+      opacity: 0.65,
+    },
 
-  loadMoreBtnText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
+    loadMoreBtnText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: s(10),
+    },
 
-  endText: {
-    marginTop: 14,
-    textAlign: "center",
-    color: "#8A8A8A",
-    fontWeight: "500",
-  },
-});
+    endText: {
+      marginTop: s(14),
+      textAlign: "center",
+      color: "#8A8A8A",
+      fontWeight: "500",
+      fontSize: s(11),
+    },
+  });

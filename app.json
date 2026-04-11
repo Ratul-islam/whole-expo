@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "Duonamic Arena",
+    "slug": "Duonamic-Arena",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.jpeg",

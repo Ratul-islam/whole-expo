@@ -56,6 +56,7 @@ export const pathService = {
 
   getSavedPaths: async (params?: ListQuery) => {
     const { data } = await api.get(ENDPOINTS.PATH.GETSAVEPATH, { params });
+    console.log(data)
     return data;
   },
 

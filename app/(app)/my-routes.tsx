@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Pressable,
@@ -49,16 +49,23 @@ export default function MyRoutesScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
 
-  const isTablet = width >= 768;
+  // --- DYNAMIC SCALING UTILITY ---
+  const scale = useMemo(() => {
+    return (size: number) => Math.min((width / 375) * size, size * 1.3);
+  }, [width]);
 
-  const ui = {
-    contentBottom: isTablet ? 32 : 24,
-    cardGap: isTablet ? 12 : 10,
-    modePadding: isTablet ? 14 : 12,
-    footerPad: isTablet ? 18 : 16,
-    buttonRadius: isTablet ? 18 : 16,
-    smallText: isTablet ? 13 : 12,
-  };
+  const styles = useMemo(() => getResponsiveStyles(scale), [scale]);
+
+  const ui = useMemo(() => {
+    return {
+      contentBottom: scale(24),
+      cardGap: scale(10),
+      modePadding: scale(12),
+      footerPad: scale(16),
+      buttonRadius: scale(16),
+      smallText: scale(10),
+    };
+  }, [scale]);
 
   const [tab, setTab] = useState<Tab>("CREATED");
   const [query, setQuery] = useState("");
@@ -75,7 +82,7 @@ export default function MyRoutesScreen() {
   const [saved, setSaved] = useState<RouteCardModel[]>([]);
   const [fallbackAll, setFallbackAll] = useState<any[]>([]);
 
-  const [deviceConnected, setDeviceConnected] = useState<ConnectedDevice>(null);
+  const [deviceConnected, setDeviceConnected] = useState<ConnectedDevice | any>(null);
   const [deviceReady, setDeviceReady] = useState(false);
 
   const [selected, setSelected] = useState<RouteCardModel | null>(null);
@@ -83,38 +90,56 @@ export default function MyRoutesScreen() {
   const [notice, setNotice] = useState<Notice>(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<RouteCardModel | null>(
-    null
-  );
+  const [pendingDelete, setPendingDelete] = useState<RouteCardModel | null>(null);
 
   const [editMode, setEditMode] = useState(false);
-
   const [busyVisibilityId, setBusyVisibilityId] = useState<string | null>(null);
 
   const queryRef = useRef(query);
   queryRef.current = query;
 
   const data = tab === "CREATED" ? created : saved;
-  const canUpload = !!(
+
+  // --- DEVICE CONNECTION & UPLOAD LOGIC ---
+  const isDeviceConnected = !!(
     deviceConnected?.deviceId &&
     deviceConnected?.deviceSecret &&
     deviceConnected?.boardConf
   );
 
+  const isOnlineMode = deviceConnected?.control === "online";
+  
+  let uploadLabel = "SCAN DEVICE TO CONNECT";
+  let canUploadButton = false;
+
+  if (isDeviceConnected) {
+    if (isOnlineMode) {
+      uploadLabel = "UPLOAD TO DEVICE";
+      canUploadButton = true;
+    } else {
+      uploadLabel = "MANUAL MODE";
+      canUploadButton = false;
+    }
+  }
+
   const mapToModel = (raw: any): RouteCardModel => {
     const p = raw?.path?._id ? raw.path : raw;
     return {
-      id: p?._id ?? p?.id,
+      id: raw?._id ?? p?._id ?? p?.id, 
+      
+      // FIX: Changed || to ?? to prevent mixing operators
+      targetPathId: raw?.pathId ?? p?._id ?? p?.id, 
+      
       title: titleSafe(p?.name),
       steps: safeArr(p?.path).length,
       boardConf: p.boardConf,
       createdAt: p?.createdAt,
       path: safeArr<PathStep>(p?.path),
       isPublic: !!p?.isPublic,
-    };
+    } as any;
   };
 
-  const goCreate = () => router.push("/(app)/route-editor");
+  const goCreate = () => router.replace("/(app)/route-editor");
 
   const resetPaging = () => {
     setPage(1);
@@ -131,18 +156,11 @@ export default function MyRoutesScreen() {
 
       const connectedFlag = payload?.connected;
       const deviceId = pickKey(payload, ["deviceId", "deviceID", "device_id"]);
-      const deviceSecret = pickKey(payload, [
-        "deviceSecret",
-        "device_secret",
-      ]);
-
-      const rawBoard = pickKey(payload, [
-        "boardConf",
-        "board_conf",
-        "boardCONF",
-      ]) as string | undefined;
+      const deviceSecret = pickKey(payload, ["deviceSecret", "device_secret"]);
+      const rawBoard = pickKey(payload, ["boardConf", "board_conf", "boardCONF"]) as string | undefined;
 
       const boardConf = rawBoard ? normalizeBoardConf(rawBoard) : undefined;
+      const control = res?.data?.sessionId?.control;
 
       if (connectedFlag === false || !deviceId || !deviceSecret) {
         setDeviceConnected(null);
@@ -154,6 +172,7 @@ export default function MyRoutesScreen() {
         deviceSecret,
         boardConf,
         sessionId: payload.sessionId._id,
+        control,
       } as any);
 
       if (boardConf) setQuery(boardConf);
@@ -163,6 +182,11 @@ export default function MyRoutesScreen() {
     } finally {
       setDeviceReady(true);
     }
+  };
+
+  const handleSelectRoute = async (item: RouteCardModel) => {
+    setSelected(item);
+    await fetchDeviceStatus();
   };
 
   const fetchPage = async (opts: { reset?: boolean } = {}) => {
@@ -188,19 +212,19 @@ export default function MyRoutesScreen() {
       const res = (tab === "SAVED"
         ? await pathService.getSavedPaths(params)
         : await pathService.getAllPath(params)) as ApiResponse | any;
-
-      const ok = res && res.status === "success";
+      const ok = res;
       const meta: ApiMeta | undefined = ok ? res.meta : res?.meta;
 
-      const dataRaw = ok
-        ? safeArr<any>(res.data.list)
-        : safeArr<any>(res?.data.list);
+      // Extract array properly handling both CREATED and SAVED payload structures
+      const responsePayload = res?.data?.list ?? res?.data;
+      const dataRaw = safeArr<any>(responsePayload);
 
       const backendHasPaging =
         !!meta &&
         (typeof meta.hasMore === "boolean" || typeof meta.total === "number");
 
       const setList = tab === "SAVED" ? setSaved : setCreated;
+      
       const currentList = tab === "SAVED" ? saved : created;
 
       if (backendHasPaging) {
@@ -260,11 +284,7 @@ export default function MyRoutesScreen() {
       setRefreshing(false);
     } catch (e: any) {
       setErrorText(e?.message || "Failed to load routes.");
-      setNotice({
-        type: "error",
-        title: "Could not load routes",
-        message: e?.message,
-      });
+      setNotice({ type: "error", title: "Could not load routes", message: e?.message });
       setLoading(false);
       setLoadingMore(false);
       setRefreshing(false);
@@ -313,75 +333,48 @@ export default function MyRoutesScreen() {
   const onUpload = async () => {
     if (!selected) return;
 
-    if (!deviceConnected?.deviceId || !deviceConnected?.deviceSecret) {
-      setNotice({
-        type: "info",
-        title: "Device required",
-        message: "Scan/connect a device to upload this route.",
-      });
-      return;
+    if (!isDeviceConnected) {
+      throw new Error("Scan/connect a device to upload this route.");
     }
 
-    try {
-      setNotice({
-        type: "info",
-        title: "Uploading",
-        message: "Sending route to device…",
-      });
-
-      await deviceService.loadPreset({
-        id: deviceConnected.sessionId,
-        pathId: selected.id,
-      });
-
-      setNotice({
-        type: "success",
-        title: "Uploaded",
-        message: "Route uploaded to device.",
-      });
-      setSelected(null);
-      router.push("/(app)");
-    } catch (e: any) {
-      setNotice({
-        type: "error",
-        title: "Upload failed",
-        message: e?.message || "Please try again.",
-      });
+    if (!isOnlineMode) {
+      throw new Error("Device is currently in manual mode. Switch to online mode to upload.");
     }
+    
+    // Extract the exact pathId (rather than the saved path reference ID)
+    const uploadId = (selected as any).targetPathId || selected.id;
+
+    const res = await deviceService.loadPreset({
+      id: deviceConnected.sessionId,
+      pathId: uploadId,
+    });
+
+    console.log(res)
+    if (res?.status === "error" || res?.status === "fail" || res?.error || res?.success === false) {
+      throw new Error(res?.message || "Device rejected the upload.");
+    }
+
+    setSelected(null); // Closes the board viewer
+    router.replace("/(app)/device"); // Redirects to device page
   };
 
   const toggleLeaderboard = async (route: RouteCardModel) => {
     try {
       setBusyVisibilityId(route.id);
-
       const next = !route.isPublic;
 
-      await (pathService as any).updatePath?.({
-        pathId: route.id,
-        isPublic: next,
-      });
+      await (pathService as any).updatePath?.({ pathId: route.id, isPublic: next });
 
-      setCreated((prev) =>
-        prev.map((x) => (x.id === route.id ? { ...x, isPublic: next } : x))
-      );
-
+      setCreated((prev) => prev.map((x) => (x.id === route.id ? { ...x, isPublic: next } : x)));
       setNotice({
         type: "success",
         title: next ? "Uploaded" : "Made private",
-        message: next
-          ? "This route is now on the leaderboard."
-          : "This route is now private.",
+        message: next ? "This route is now on the leaderboard." : "This route is now private.",
       });
-
-      setSelected((cur) =>
-        cur?.id === route.id ? { ...cur, isPublic: next } : cur
-      );
+      setSelected((cur) => cur?.id === route.id ? { ...cur, isPublic: next } : cur);
     } catch (e: any) {
-      setNotice({
-        type: "error",
-        title: "Update failed",
-        message: e?.message || "Could not update leaderboard status.",
-      });
+      setNotice({ type: "error", title: "Update failed", message: e?.message || "Could not update leaderboard status." });
+      throw e;
     } finally {
       setBusyVisibilityId(null);
     }
@@ -401,24 +394,12 @@ export default function MyRoutesScreen() {
 
     if (tab === "SAVED") {
       try {
-        setNotice({
-          type: "info",
-          title: "Removing",
-          message: "Removing from saved…",
-        });
+        setNotice({ type: "info", title: "Removing", message: "Removing from saved…" });
         await pathService.deleteSavedPath(r.id);
         setSaved((prev) => prev.filter((x) => x.id !== r.id));
-        setNotice({
-          type: "success",
-          title: "Removed",
-          message: "Route removed from saved list.",
-        });
+        setNotice({ type: "success", title: "Removed", message: "Route removed from saved list." });
       } catch (err: any) {
-        setNotice({
-          type: "error",
-          title: "Remove failed",
-          message: err?.message || "Could not remove saved route.",
-        });
+        setNotice({ type: "error", title: "Remove failed", message: err?.message || "Could not remove saved route." });
       }
       return;
     }
@@ -429,11 +410,7 @@ export default function MyRoutesScreen() {
       setCreated((prev) => prev.filter((x) => x.id !== r.id));
       setNotice({ type: "success", title: "Deleted", message: "Route deleted." });
     } catch (err: any) {
-      setNotice({
-        type: "error",
-        title: "Delete failed",
-        message: err?.message || "Could not delete the route.",
-      });
+      setNotice({ type: "error", title: "Delete failed", message: err?.message || "Could not delete the route." });
     }
   };
 
@@ -448,27 +425,14 @@ export default function MyRoutesScreen() {
       );
     }
 
-    console.log(data)
     return (
       <View style={styles.emptyWrap}>
         <EmptyState
           title={query.trim() ? "No results" : "No routes yet"}
-          hint={
-            query.trim()
-              ? "Try a different search."
-              : "Create your first route to get started."
-          }
+          hint={query.trim() ? "Try a different search." : "Create your first route to get started."}
         />
         {!query.trim() ? (
-          <Pressable
-            onPress={goCreate}
-            style={[
-              styles.emptyBtn,
-              {
-                borderRadius: ui.buttonRadius,
-              },
-            ]}
-          >
+          <Pressable onPress={goCreate} style={[styles.emptyBtn, { borderRadius: ui.buttonRadius }]}>
             <Text style={styles.emptyBtnText}>OPEN ROUTE EDITOR</Text>
           </Pressable>
         ) : null}
@@ -476,9 +440,6 @@ export default function MyRoutesScreen() {
     );
   };
 
-
-
-  console.log(data)
   return (
     <ScreenLayout title="" subtitle="">
       <FlatList
@@ -490,7 +451,7 @@ export default function MyRoutesScreen() {
               item={item}
               tab={tab}
               device={deviceConnected}
-              onPress={() => setSelected(item)}
+              onPress={() => handleSelectRoute(item)}
               onDelete={() => requestDelete(item)}
             />
 
@@ -498,19 +459,14 @@ export default function MyRoutesScreen() {
               <View style={styles.editRow}>
                 <Pressable
                   onPress={() =>
-                    router.push({
+                    router.replace({
                       pathname: "/(app)/route-editor",
                       params: { pathId: item.id },
                     } as any)
                   }
-                  style={[
-                    styles.editBtn,
-                    { borderRadius: ui.buttonRadius },
-                  ]}
+                  style={[styles.editBtn, { borderRadius: ui.buttonRadius }]}
                 >
-                  <Text style={[styles.editBtnText, { fontSize: ui.smallText }]}>
-                    EDIT
-                  </Text>
+                  <Text style={[styles.editBtnText, { fontSize: ui.smallText }]}>EDIT</Text>
                 </Pressable>
 
                 <Pressable
@@ -526,9 +482,7 @@ export default function MyRoutesScreen() {
                   <Text
                     style={[
                       styles.leaderBtnText,
-                      item.isPublic
-                        ? styles.leaderBtnTextOff
-                        : styles.leaderBtnTextOn,
+                      item.isPublic ? styles.leaderBtnTextOff : styles.leaderBtnTextOn,
                       { fontSize: ui.smallText },
                     ]}
                   >
@@ -558,17 +512,8 @@ export default function MyRoutesScreen() {
             />
 
             {tab === "CREATED" ? (
-              <View
-                style={[
-                  styles.modeBar,
-                  {
-                    padding: ui.modePadding,
-                  },
-                ]}
-              >
-                <Text style={[styles.modeLabel, { fontSize: ui.smallText }]}>
-                  EDIT MODE
-                </Text>
+              <View style={[styles.modeBar, { padding: ui.modePadding }]}>
+                <Text style={[styles.modeLabel, { fontSize: ui.smallText }]}>EDIT MODE</Text>
 
                 <Pressable
                   onPress={() => setEditMode((v) => !v)}
@@ -598,22 +543,14 @@ export default function MyRoutesScreen() {
         ListEmptyComponent={empty}
         contentContainerStyle={{ paddingBottom: ui.contentBottom }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#111111"
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#111111" />}
         onEndReachedThreshold={0.35}
         onEndReached={onEndReached}
         ListFooterComponent={
           loading || loadingMore ? (
             <View style={[styles.footer, { paddingVertical: ui.footerPad }]}>
               <ActivityIndicator color="#111111" />
-              <Text style={styles.footerText}>
-                {loading ? "Loading…" : "Loading more…"}
-              </Text>
+              <Text style={styles.footerText}>{loading ? "Loading…" : "Loading more…"}</Text>
             </View>
           ) : hasMore ? (
             <View style={[styles.footer, { paddingVertical: ui.footerPad }]}>
@@ -636,9 +573,9 @@ export default function MyRoutesScreen() {
         path={selected?.path || []}
         pathName={selected?.title || "Route"}
         onClose={() => setSelected(null)}
-        canUpload={canUpload}
+        canUpload={canUploadButton}
         onUpload={onUpload}
-        uploadLabel={canUpload ? "UPLOAD TO DEVICE" : "SCAN DEVICE TO UPLOAD"}
+        uploadLabel={uploadLabel}
         canToggleLeaderboard={tab === "CREATED"}
         isPublic={!!selected?.isPublic}
         onToggleLeaderboard={() => {
@@ -652,9 +589,7 @@ export default function MyRoutesScreen() {
         title={tab === "CREATED" ? "Delete route?" : "Remove route?"}
         message={
           pendingDelete
-            ? `This will ${
-                tab === "CREATED" ? "permanently delete" : "remove"
-              } "${pendingDelete.title}".`
+            ? `This will ${tab === "CREATED" ? "permanently delete" : "remove"} "${pendingDelete.title}".`
             : ""
         }
         confirmLabel={tab === "CREATED" ? "DELETE" : "REMOVE"}
@@ -669,160 +604,73 @@ export default function MyRoutesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  emptyWrap: {
-    marginTop: 10,
-  },
-
-  emptyBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-    backgroundColor: "#111111",
-    borderWidth: 1,
-    borderColor: "#111111",
-  },
-
-  emptyBtnText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-
-  footer: {
-    alignItems: "center",
-    gap: 10,
-  },
-
-  footerText: {
-    color: "#444444",
-    fontWeight: "600",
-  },
-
-  footerMuted: {
-    color: "#7A7A7A",
-    fontWeight: "500",
-  },
-
-  modeBar: {
-    marginTop: 10,
-    marginBottom: 6,
-    marginHorizontal: 2,
-    backgroundColor: "#F7F7F7",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: 18,
-  },
-
-  modeLabel: {
-    color: "#6B6B6B",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-
-  modeToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "#EDEDED",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-  },
-
-  modeToggleOn: {
-    borderColor: "#111111",
-    backgroundColor: "#111111",
-  },
-
-  modeToggleText: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-
-  modeToggleTextOn: {
-    color: "#FFFFFF",
-  },
-
-  checkBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#D0D0D0",
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  checkBoxOn: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#FFFFFF",
-  },
-
-  checkMark: {
-    color: "#111111",
-    fontWeight: "700",
-    fontSize: 14,
-    lineHeight: 16,
-  },
-
-  editRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 6,
-  },
-
-  editBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    backgroundColor: "#EDEDED",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-  },
-
-  editBtnText: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
-
-  leaderBtn: {
-    flex: 1.2,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-
-  leaderBtnOn: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
-
-  leaderBtnOff: {
-    backgroundColor: "rgba(225,85,114,0.08)",
-    borderColor: "rgba(225,85,114,0.28)",
-  },
-
-  leaderBtnText: {
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textAlign: "center",
-    paddingHorizontal: 6,
-  },
-
-  leaderBtnTextOn: {
-    color: "#FFFFFF",
-  },
-
-  leaderBtnTextOff: {
-    color: "#C44760",
-  },
-});
+const getResponsiveStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    emptyWrap: { marginTop: s(10) },
+    emptyBtn: {
+      marginTop: s(10),
+      paddingVertical: s(12),
+      alignItems: "center",
+      backgroundColor: "#111111",
+      borderWidth: 1,
+      borderColor: "#111111",
+    },
+    emptyBtnText: { color: "#FFFFFF", fontWeight: "700", letterSpacing: 0.8, fontSize: s(14) },
+    footer: { alignItems: "center", gap: s(10) },
+    footerText: { color: "#444444", fontWeight: "600", fontSize: s(14) },
+    footerMuted: { color: "#7A7A7A", fontWeight: "500", fontSize: s(14) },
+    modeBar: {
+      marginTop: s(10),
+      marginBottom: s(6),
+      marginHorizontal: s(2),
+      backgroundColor: "#F7F7F7",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      borderRadius: s(18),
+    },
+    modeLabel: { color: "#6B6B6B", fontWeight: "700", letterSpacing: 0.8 },
+    modeToggle: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: s(10),
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      backgroundColor: "#EDEDED",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+    },
+    modeToggleOn: { borderColor: "#111111", backgroundColor: "#111111" },
+    modeToggleText: { color: "#111111", fontWeight: "700", letterSpacing: 0.8 },
+    modeToggleTextOn: { color: "#FFFFFF" },
+    checkBox: {
+      width: s(22),
+      height: s(22),
+      borderRadius: s(8),
+      borderWidth: 1,
+      borderColor: "#D0D0D0",
+      backgroundColor: "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    checkBoxOn: { backgroundColor: "#FFFFFF", borderColor: "#FFFFFF" },
+    checkMark: { color: "#111111", fontWeight: "700", fontSize: s(14), lineHeight: s(16) },
+    editRow: { marginTop: s(8), flexDirection: "row", gap: s(10), paddingHorizontal: s(6) },
+    editBtn: {
+      flex: 1,
+      paddingVertical: s(12),
+      alignItems: "center",
+      backgroundColor: "#EDEDED",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+    },
+    editBtnText: { color: "#111111", fontWeight: "700", letterSpacing: 0.8 },
+    leaderBtn: { flex: 1.2, paddingVertical: s(12), alignItems: "center", borderWidth: 1 },
+    leaderBtnOn: { backgroundColor: "#111111", borderColor: "#111111" },
+    leaderBtnOff: { backgroundColor: "rgba(225,85,114,0.08)", borderColor: "rgba(225,85,114,0.28)" },
+    leaderBtnText: { fontWeight: "700", letterSpacing: 0.6, textAlign: "center", paddingHorizontal: s(6) },
+    leaderBtnTextOn: { color: "#FFFFFF" },
+    leaderBtnTextOff: { color: "#C44760" },
+  });

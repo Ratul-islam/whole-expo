@@ -60,9 +60,6 @@ export default function HomeScreen() {
                 height: logoHeight,
               }}
             />
-            <Text style={[styles.brand, { fontSize: isTablet ? 44 : 34 }]}>
-              Arena
-            </Text>
           </View>
 
           <View style={styles.sections}>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
 
 export type SessionStatus = "starting" | "preset_loaded" | "in_game" | "completed" | "abandoned";
 
@@ -22,6 +22,9 @@ function formatTinyTime(iso?: string) {
 }
 
 export function GameCard({ game, index }: { game: ProfileSession; index: number }) {
+  const scaleHook = useResponsiveScale();
+  const s = useMemo(() => getResponsiveStyles(scaleHook), [scaleHook]);
+
   const slideIn = useRef(new Animated.Value(50)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
 
@@ -48,14 +51,7 @@ export function GameCard({ game, index }: { game: ProfileSession; index: number 
 
   return (
     <Animated.View style={{ transform: [{ translateX: slideIn }], opacity: fadeIn }}>
-      <LinearGradient
-        colors={
-          isCompleted
-            ? ["rgba(16, 185, 129, 0.10)", "rgba(16, 185, 129, 0.02)"]
-            : ["rgba(255,255,255,0.06)", "rgba(255,255,255,0.02)"]
-        }
-        style={s.card}
-      >
+      <View style={[s.card, isCompleted ? s.cardOk : s.cardNeutral]}>
         <View style={s.head}>
           <View style={s.statusRow}>
             <View style={[s.dot, isCompleted ? s.dotOk : s.dotWarn]} />
@@ -65,20 +61,20 @@ export function GameCard({ game, index }: { game: ProfileSession; index: number 
         </View>
 
         <View style={s.row}>
-          <Stat value={game.score} label="Score" />
-          <Divider />
-          <Stat value={game.correct} label="Correct" tint="#10B981" />
-          <Divider />
-          <Stat value={game.wrong} label="Wrong" tint="#EF4444" />
-          <Divider />
-          <Stat value={`${accuracy}%`} label="Acc" />
+          <Stat value={game.score} label="Score" s={s} />
+          <View style={s.div} />
+          <Stat value={game.correct} label="Correct" tint="#059669" s={s} />
+          <View style={s.div} />
+          <Stat value={game.wrong} label="Wrong" tint="#DC2626" s={s} />
+          <View style={s.div} />
+          <Stat value={`${accuracy}%`} label="Acc" s={s} />
         </View>
-      </LinearGradient>
+      </View>
     </Animated.View>
   );
 }
 
-function Stat({ value, label, tint }: { value: string | number; label: string; tint?: string }) {
+function Stat({ value, label, tint, s }: { value: string | number; label: string; tint?: string; s: any }) {
   return (
     <View style={s.stat}>
       <Text style={[s.statVal, tint ? { color: tint } : null]}>{value}</Text>
@@ -87,22 +83,33 @@ function Stat({ value, label, tint }: { value: string | number; label: string; t
   );
 }
 
-function Divider() {
-  return <View style={s.div} />;
-}
-
-const s = StyleSheet.create({
-  card: { padding: 16, borderRadius: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
-  head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  dotOk: { backgroundColor: "#10B981" },
-  dotWarn: { backgroundColor: "#F59E0B" },
-  statusText: { color: "rgba(255,255,255,0.72)", fontSize: 11, fontWeight: "900", letterSpacing: 1 },
-  date: { color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: "700" },
-  row: { flexDirection: "row", alignItems: "center" },
-  stat: { flex: 1, alignItems: "center" },
-  statVal: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  statLbl: { color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: "800", marginTop: 2 },
-  div: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.10)" },
-});
+const getResponsiveStyles = (scale: (val: number) => number) =>
+  StyleSheet.create({
+    card: { 
+      padding: scale(16), 
+      borderRadius: scale(18), 
+      borderWidth: 1, 
+      backgroundColor: "#FFFFFF",
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.02,
+      shadowRadius: 4,
+      elevation: 1,
+    },
+    cardOk: { borderColor: "rgba(16, 185, 129, 0.3)" },
+    cardNeutral: { borderColor: "#E3E3E3" },
+    
+    head: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: scale(12) },
+    statusRow: { flexDirection: "row", alignItems: "center", gap: scale(8) },
+    dot: { width: scale(8), height: scale(8), borderRadius: scale(4) },
+    dotOk: { backgroundColor: "#10B981" },
+    dotWarn: { backgroundColor: "#F59E0B" },
+    statusText: { color: "#111111", fontSize: scale(11), fontWeight: "800", letterSpacing: 0.8 },
+    date: { color: "#8A8A8A", fontSize: scale(11), fontWeight: "600" },
+    
+    row: { flexDirection: "row", alignItems: "center" },
+    stat: { flex: 1, alignItems: "center" },
+    statVal: { color: "#111111", fontSize: scale(16), fontWeight: "800", letterSpacing: -0.5 },
+    statLbl: { color: "#6B6B6B", fontSize: scale(10), fontWeight: "700", marginTop: scale(2) },
+    div: { width: 1, height: scale(28), backgroundColor: "#E3E3E3" },
+  });

@@ -38,9 +38,17 @@ export default function LeaderboardScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.bottomBox}>
-        <Text style={styles.text}>Athlete</Text>
-      </TouchableOpacity>
+
+
+        <View style={styles.bottomBox}>
+            <Pressable onPress={()=>{
+                router.push("/(app)/gamesLeaderboard")
+            }} >
+
+            <Text style={styles.text}>Athelete</Text>
+            </Pressable>
+
+        </View>
     </SafeAreaView>
   );
 }

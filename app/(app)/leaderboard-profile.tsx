@@ -7,10 +7,8 @@ import {
   StyleSheet,
   Text,
   View,
-  Dimensions,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { ScreenLayout } from "../../src/ui/app/screenLayout";
 import { userService } from "@/src/user/user.service";
 
@@ -19,11 +17,11 @@ import { StatCard } from "@/src/ui/profile/StatCard";
 import { GameCard, type ProfileSession } from "@/src/ui/profile/GameCard";
 import { RouteCard, type ProfilePath } from "@/src/ui/profile/RouteCard";
 import { PathBoardViewer, type PathStep } from "@/src/ui/profile/PathBoardViewer";
-import { FloatingParticles } from "@/src/ui/profile/FloatingParticles";
+
 
 import { pathService } from "@/src/path/path.services";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
+import { GameDetailsModal } from "@/src/ui/app/GameDetailsModal";
 
 type SessionStatus = "starting" | "preset_loaded" | "in_game" | "completed" | "abandoned";
 
@@ -79,12 +77,17 @@ export default function LeaderboardProfileScreen() {
   const params = useLocalSearchParams<{ userId?: string }>();
   const userId = typeof params.userId === "string" ? params.userId : "";
 
+  const scale = useResponsiveScale();
+  const s = useMemo(() => getResponsiveStyles(scale), [scale]);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfileResponse["data"] | null>(null);
 
   const [viewingPath, setViewingPath] = useState<ProfilePath | null>(null);
+  
+  const [selectedGame, setSelectedGame] = useState<ProfileSession | null>(null);
 
   const [savingBusy, setSavingBusy] = useState(false);
   const [savedMap, setSavedMap] = useState<Record<string, boolean>>({});
@@ -144,8 +147,7 @@ export default function LeaderboardProfileScreen() {
       const res = await pathService.checkSavedPath(pathId);
       const isSaved = !!(res as any)?.data?.saved || !!(res as any)?.saved;
       setSavedMap((m) => ({ ...m, [pathId]: isSaved }));
-    } catch {
-    }
+    } catch {}
   };
 
   const toggleSave = async (pathId: string) => {
@@ -168,54 +170,45 @@ export default function LeaderboardProfileScreen() {
   return (
     <ScreenLayout title="" subtitle="">
       <View style={s.container}>
-        <FloatingParticles />
-
         <ScrollView
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#8B5CF6"
-              colors={["#8B5CF6"]}
+              tintColor="#111111"
             />
           }
           contentContainerStyle={s.scrollContent}
         >
           <View style={s.header}>
             <Pressable onPress={() => router.back()} style={s.backBtn}>
-              <LinearGradient colors={["rgba(255,255,255,0.10)", "rgba(255,255,255,0.05)"]} style={s.backBtnGrad}>
-                <Text style={s.backText}>←</Text>
-              </LinearGradient>
+              <Text style={s.backText}>←</Text>
             </Pressable>
             <Text style={s.headerTitle}>PLAYER PROFILE</Text>
-            <View style={{ width: 48 }} />
+            <View style={{ width: scale(40) }} />
           </View>
 
           {loading ? (
             <View style={s.center}>
-              <ActivityIndicator size="large" color="#8B5CF6" />
-              <Text style={s.centerText}>Loading…</Text>
+              <ActivityIndicator size="large" color="#111111" />
+              <Text style={s.centerText}>Loading profile…</Text>
             </View>
           ) : errorText ? (
-            <LinearGradient colors={["rgba(239, 68, 68, 0.15)", "rgba(239, 68, 68, 0.05)"]} style={s.errBox}>
+            <View style={s.errBox}>
               <Text style={s.errTitle}>Couldn’t load profile</Text>
               <Text style={s.errText}>{errorText}</Text>
               <Pressable onPress={load} style={s.errBtn}>
-                <LinearGradient colors={["#8B5CF6", "#6366F1"]} style={s.errBtnGrad}>
-                  <Text style={s.errBtnText}>Try Again</Text>
-                </LinearGradient>
+                <Text style={s.errBtnText}>Try Again</Text>
               </Pressable>
-            </LinearGradient>
+            </View>
           ) : !profile ? (
             <View style={s.center}>
               <Text style={s.centerText}>Profile not found</Text>
             </View>
           ) : (
             <>
-              <LinearGradient colors={["rgba(139, 92, 246, 0.15)", "rgba(99, 102, 241, 0.05)"]} style={s.hero}>
-                <View style={s.heroGlow} />
-
+              <View style={s.hero}>
                 <AnimatedAvatar
                   firstName={profile.user.firstName}
                   lastName={profile.user.lastName}
@@ -225,7 +218,9 @@ export default function LeaderboardProfileScreen() {
                 <Text style={s.name}>{name}</Text>
 
                 <View style={[s.tag, profile.user.isVerified ? s.tagOk : s.tagNeutral]}>
-                  <Text style={s.tagText}>{profile.user.isVerified ? "✓ VERIFIED" : "NEW PLAYER"}</Text>
+                  <Text style={profile.user.isVerified ? s.tagTextOk : s.tagTextNeutral}>
+                    {profile.user.isVerified ? "✓ VERIFIED" : "NEW PLAYER"}
+                  </Text>
                 </View>
 
                 <View style={s.scoreBox}>
@@ -244,32 +239,41 @@ export default function LeaderboardProfileScreen() {
                     <Text style={s.quickLbl}>Last active</Text>
                   </View>
                 </View>
-              </LinearGradient>
-
-              <View style={s.grid}>
-                <StatCard icon="🎮" label="Games" value={stats?.gamesPlayed ?? 0} gradient={["rgba(59,130,246,0.20)", "rgba(59,130,246,0.05)"]} />
-                <StatCard icon="🎯" label="Accuracy" value={`${accuracy}%`} gradient={["rgba(16,185,129,0.20)", "rgba(16,185,129,0.05)"]} />
-                <StatCard icon="✅" label="Correct" value={stats?.totalCorrect ?? 0} gradient={["rgba(34,197,94,0.20)", "rgba(34,197,94,0.05)"]} />
-                <StatCard icon="❌" label="Wrong" value={stats?.totalWrong ?? 0} gradient={["rgba(239,68,68,0.20)", "rgba(239,68,68,0.05)"]} />
               </View>
 
-              <Section title="RECENT GAMES" count={games.length}>
+              <View style={s.grid}>
+                <StatCard icon="🎮" label="Games" value={stats?.gamesPlayed ?? 0}  />
+                <StatCard icon="🎯" label="Accuracy" value={`${accuracy}%`}/>
+                <StatCard icon="✅" label="Correct" value={stats?.totalCorrect ?? 0} />
+                <StatCard icon="❌" label="Wrong" value={stats?.totalWrong ?? 0} />
+              </View>
+
+              <Section title="RECENT GAMES" count={games.length} s={s} scale={scale}>
                 {games.length === 0 ? (
-                  <Empty text="No games yet" sub="Games will appear here once played." />
+                  <Empty text="No games yet" sub="Games will appear here once played." s={s} />
                 ) : (
-                  <View style={{ gap: 10 }}>
+                  <View style={{ gap: scale(10) }}>
                     {games.slice(0, 5).map((g, i) => (
-                      <GameCard key={g._id} game={g} index={i} />
+                      // 3. Wrapped GameCard in a Pressable to trigger the modal
+                      <Pressable 
+                        key={g._id} 
+                        onPress={() => setSelectedGame(g)}
+                        style={({ pressed }) => [
+                          pressed && { opacity: 0.7 }
+                        ]}
+                      >
+                        <GameCard game={g} index={i} />
+                      </Pressable>
                     ))}
                   </View>
                 )}
               </Section>
 
-              <Section title="CREATED ROUTES" count={paths.length}>
+              <Section title="CREATED ROUTES" count={paths.length} s={s} scale={scale}>
                 {paths.length === 0 ? (
-                  <Empty text="No routes created" sub="This player hasn’t created any routes yet." />
+                  <Empty text="No routes created" sub="This player hasn’t created any routes yet." s={s} />
                 ) : (
-                  <View style={{ gap: 10 }}>
+                  <View style={{ gap: scale(10) }}>
                     {paths.slice(0, 5).map((r, i) => (
                       <RouteCard
                         key={r._id}
@@ -291,7 +295,7 @@ export default function LeaderboardProfileScreen() {
             </>
           )}
 
-          <View style={{ height: 34 }} />
+          <View style={{ height: scale(40) }} />
         </ScrollView>
 
         <PathBoardViewer
@@ -299,6 +303,7 @@ export default function LeaderboardProfileScreen() {
           visible={!!viewingPath}
           path={(viewingPath?.path || []) as PathStep[]}
           pathName={viewingPath?.name || "Untitled Route"}
+          boardConf={viewingPath?.boardConf}
           onClose={() => setViewingPath(null)}
           canSave={true}
           isSaved={viewingPath ? !!savedMap[viewingPath._id] : false}
@@ -308,14 +313,24 @@ export default function LeaderboardProfileScreen() {
             return toggleSave(viewingPath._id);
           }}
         />
+
+        {/* 4. Render the modal sibling to your viewer */}
+        <GameDetailsModal
+          visible={!!selectedGame}
+          game={selectedGame as any} 
+          onClose={() => setSelectedGame(null)}
+          onScanAgainLabel="CLOSE"
+        />
+
       </View>
     </ScreenLayout>
   );
 }
 
-function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+// --- SUB-COMPONENTS ---
+function Section({ title, count, children, s, scale }: any) {
   return (
-    <View style={{ marginTop: 22 }}>
+    <View style={{ marginTop: scale(24) }}>
       <View style={s.secHead}>
         <Text style={s.secTitle}>{title}</Text>
         <Text style={s.secCount}>{count}</Text>
@@ -325,7 +340,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
   );
 }
 
-function Empty({ text, sub }: { text: string; sub: string }) {
+function Empty({ text, sub, s }: any) {
   return (
     <View style={s.empty}>
       <Text style={s.emptyTitle}>{text}</Text>
@@ -334,64 +349,78 @@ function Empty({ text, sub }: { text: string; sub: string }) {
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0f0f1a" },
-  scrollContent: { paddingHorizontal: 16 },
+const getResponsiveStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: "#FFFFFF" },
+    scrollContent: { paddingHorizontal: s(16) },
 
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 },
-  backBtn: { borderRadius: 14, overflow: "hidden" },
-  backBtnGrad: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-  },
-  backText: { color: "#fff", fontSize: 24, fontWeight: "700" },
-  headerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", letterSpacing: 2 },
+    header: { 
+      flexDirection: "row", 
+      alignItems: "center", 
+      justifyContent: "space-between", 
+      paddingVertical: s(12), 
+      marginTop: s(6) 
+    },
+    backBtn: {
+      width: s(40),
+      height: s(40),
+      borderRadius: s(12),
+      backgroundColor: "#F7F7F7",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    backText: { color: "#111111", fontSize: s(18), fontWeight: "700" },
+    headerTitle: { color: "#111111", fontSize: s(14), fontWeight: "800", letterSpacing: 1.5 },
 
-  center: { marginTop: 90, alignItems: "center", gap: 12 },
-  centerText: { color: "rgba(255,255,255,0.7)", fontWeight: "800" },
+    center: { marginTop: s(90), alignItems: "center", gap: s(12) },
+    centerText: { color: "#6B6B6B", fontWeight: "600", fontSize: s(14) },
 
-  errBox: { marginTop: 24, padding: 20, borderRadius: 18, borderWidth: 1, borderColor: "rgba(239, 68, 68, 0.3)", alignItems: "center", gap: 10 },
-  errTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  errText: { color: "rgba(255,255,255,0.7)", fontWeight: "700", textAlign: "center" },
-  errBtn: { marginTop: 6, borderRadius: 12, overflow: "hidden" },
-  errBtnGrad: { paddingVertical: 12, paddingHorizontal: 18 },
-  errBtnText: { color: "#fff", fontWeight: "900" },
+    errBox: { marginTop: s(24), padding: s(20), borderRadius: s(18), backgroundColor: "rgba(225,85,114,0.08)", borderWidth: 1, borderColor: "rgba(225,85,114,0.28)", alignItems: "center", gap: s(10) },
+    errTitle: { color: "#C44760", fontSize: s(16), fontWeight: "800" },
+    errText: { color: "#111111", fontWeight: "600", textAlign: "center", fontSize: s(13) },
+    errBtn: { marginTop: s(6), borderRadius: s(14), backgroundColor: "#111111", paddingVertical: s(12), paddingHorizontal: s(20) },
+    errBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: s(13) },
 
-  hero: { borderRadius: 24, padding: 22, alignItems: "center", borderWidth: 1, borderColor: "rgba(139, 92, 246, 0.28)", overflow: "hidden" },
-  heroGlow: { position: "absolute", top: -110, width: 320, height: 320, borderRadius: 160, backgroundColor: "rgba(139, 92, 246, 0.18)" },
+    hero: { 
+      borderRadius: s(22), 
+      padding: s(22), 
+      alignItems: "center", 
+      backgroundColor: "#F7F7F7", 
+      borderWidth: 1, 
+      borderColor: "#E3E3E3", 
+      marginTop: s(10) 
+    },
 
-  name: { marginTop: 14, color: "#fff", fontSize: 26, fontWeight: "900" },
+    name: { marginTop: s(14), color: "#111111", fontSize: s(24), fontWeight: "800", letterSpacing: -0.3 },
 
-  tag: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1 },
-  tagOk: { backgroundColor: "rgba(16,185,129,0.16)", borderColor: "rgba(16,185,129,0.35)" },
-  tagNeutral: { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.10)" },
-  tagText: { color: "rgba(255,255,255,0.85)", fontWeight: "900", letterSpacing: 1 },
+    tag: { marginTop: s(8), paddingVertical: s(6), paddingHorizontal: s(12), borderRadius: s(12), borderWidth: 1 },
+    tagOk: { backgroundColor: "rgba(16,185,129,0.1)", borderColor: "rgba(16,185,129,0.3)" },
+    tagNeutral: { backgroundColor: "#EDEDED", borderColor: "#D9D9D9" },
+    tagTextOk: { color: "#047857", fontWeight: "800", fontSize: s(11), letterSpacing: 0.5 },
+    tagTextNeutral: { color: "#444444", fontWeight: "800", fontSize: s(11), letterSpacing: 0.5 },
 
-  scoreBox: { marginTop: 18, alignItems: "center" },
-  score: { color: "#fff", fontSize: 44, fontWeight: "900" },
-  scoreLbl: { color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: "900", letterSpacing: 2, marginTop: 4 },
+    scoreBox: { marginTop: s(18), alignItems: "center" },
+    score: { color: "#111111", fontSize: s(40), fontWeight: "800", letterSpacing: -1 },
+    scoreLbl: { color: "#6B6B6B", fontSize: s(11), fontWeight: "700", letterSpacing: 1.5, marginTop: s(4) },
 
-  quickRow: { marginTop: 16, flexDirection: "row", alignItems: "center", gap: 20 },
-  quick: { alignItems: "center" },
-  quickVal: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  quickLbl: { color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: "800", marginTop: 2 },
-  quickDiv: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.18)" },
+    quickRow: { marginTop: s(16), flexDirection: "row", alignItems: "center", gap: s(20) },
+    quick: { alignItems: "center" },
+    quickVal: { color: "#111111", fontSize: s(15), fontWeight: "800" },
+    quickLbl: { color: "#8A8A8A", fontSize: s(11), fontWeight: "700", marginTop: s(2) },
+    quickDiv: { width: 1, height: s(24), backgroundColor: "#D9D9D9" },
 
-  grid: { marginTop: 14, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 10 },
+    grid: { marginTop: s(14), flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: s(10) },
 
-  secHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 },
-  secTitle: { color: "#fff", fontWeight: "900", letterSpacing: 1.6 },
-  secCount: { color: "rgba(255,255,255,0.55)", fontWeight: "800" },
+    secHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginBottom: s(10) },
+    secTitle: { color: "#111111", fontWeight: "800", fontSize: s(14), letterSpacing: 0.5 },
+    secCount: { color: "#8A8A8A", fontWeight: "700", fontSize: s(14) },
 
-  empty: { padding: 18, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.03)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)", alignItems: "center", gap: 6 },
-  emptyTitle: { color: "rgba(255,255,255,0.85)", fontWeight: "900" },
-  emptySub: { color: "rgba(255,255,255,0.55)", fontWeight: "700", textAlign: "center" },
+    empty: { padding: s(18), borderRadius: s(16), backgroundColor: "#F7F7F7", borderWidth: 1, borderColor: "#E3E3E3", alignItems: "center", gap: s(6) },
+    emptyTitle: { color: "#111111", fontWeight: "800", fontSize: s(14) },
+    emptySub: { color: "#6B6B6B", fontWeight: "500", textAlign: "center", fontSize: s(13) },
 
-  member: { marginTop: 20, alignItems: "center" },
-  memberText: { color: "rgba(255,255,255,0.45)", fontWeight: "700" },
-});
+    member: { marginTop: s(20), alignItems: "center" },
+    memberText: { color: "#A5A5A5", fontWeight: "600", fontSize: s(12) },
+  });

@@ -44,7 +44,7 @@ export default function RegisterScreen() {
 
   useEffect(() => {
     if (params.verified === "true") {
-      setInfo("✅ Email verified successfully. Please log in again.");
+      setInfo("Email verified successfully. Please log in again.");
       setMode("login");
     }
   }, [params.verified]);

@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { ViewerToast, type ToastState } from "./pathboardViewer/viewerToast";
 import { normalizeBoardType, getBoardLayout, boardMeta } from "./pathboardViewer/boardConfig";
@@ -14,10 +13,12 @@ import { BoardPreview } from "./pathboardViewer/boardPreview";
 import { PathSequence } from "./pathboardViewer/pathSequence";
 import { ViewerStats } from "./pathboardViewer/viewerStats";
 import { ViewerActions } from "./pathboardViewer/viewerActions";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
 
 type HandBit = 0 | 1;
 export type PathStep = [number, HandBit];
 type ActionFn = () => Promise<any> | void;
+
 
 export function PathBoardViewer({
   visible,
@@ -55,7 +56,6 @@ export function PathBoardViewer({
   path: PathStep[];
   pathName: string;
   onClose: () => void;
-
   context?: "OWNER" | "LEADERBOARD";
 
   canUpload?: boolean;
@@ -83,7 +83,8 @@ export function PathBoardViewer({
 
   boardConf?: string | number;
 }) {
-  const { width } = useWindowDimensions();
+  const scale = useResponsiveScale();
+  const s = useMemo(() => getViewerStyles(scale), [scale]);
 
   const boardType = normalizeBoardType(boardConf);
   const layout = useMemo(() => getBoardLayout(boardType), [boardType]);
@@ -143,9 +144,6 @@ export function PathBoardViewer({
     ]).start(() => onClose());
   };
 
-  const isSmallPhone = width < 360;
-  const isTablet = width >= 768;
-
   const selectionMap = useMemo(() => {
     const map = new Map<number, { positions: number[] }>();
 
@@ -179,6 +177,7 @@ export function PathBoardViewer({
     }
   };
 
+  // Evaluate if buttons are active based entirely on parent variables and busy states
   const uploadEnabled = !!canUpload && !!onUpload && !anyBusy;
   const leaderboardEnabled = !!canToggleLeaderboard && !!onToggleLeaderboard && !anyBusy;
   const editEnabled = !!canEdit && !!onEdit && !anyBusy;
@@ -206,10 +205,8 @@ export function PathBoardViewer({
                     Status : Connected - {meta.statusSuffix}
                   </Text>
                   <Text
-                    style={[
-                      s.title,
-                      { fontSize: isTablet ? 24 : isSmallPhone ? 18 : 22 },
-                    ]}
+                    style={s.title}
+                    numberOfLines={1}
                   >
                     {pathName || meta.title}
                   </Text>
@@ -263,52 +260,39 @@ export function PathBoardViewer({
   );
 }
 
-const s = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center",
-    padding: 16,
-  },
-  modal: {
-    borderRadius: 22,
-    overflow: "hidden",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-  },
-  content: {
-    padding: 16,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 14,
-  },
-  statusText: {
-    color: "#111111",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 10,
-  },
-  title: {
-    color: "#111111",
-    fontWeight: "500",
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
-    backgroundColor: "#EDEDED",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  closeText: {
-    color: "#111111",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-});
+const getViewerStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      justifyContent: "center",
+      padding: s(16),
+    },
+    modal: {
+      borderRadius: s(22),
+      overflow: "hidden",
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+    },
+    content: { padding: s(16) },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: s(14),
+    },
+    statusText: { color: "#111111", fontSize: s(12), fontWeight: "700", marginBottom: s(10) },
+    title: { color: "#111111", fontWeight: "500", fontSize: s(14) },
+    closeBtn: {
+      width: s(36),
+      height: s(36),
+      borderRadius: s(14),
+      backgroundColor: "#EDEDED",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    closeText: { color: "#111111", fontSize: s(14), fontWeight: "700" },
+  });

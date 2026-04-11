@@ -340,7 +340,7 @@ const s = StyleSheet.create({
     backgroundColor: "#2563EB",
   },
   handR: {
-    backgroundColor: "#D97706",
+    backgroundColor: "#ff0000",
   },
   handText: {
     color: "#FFFFFF",

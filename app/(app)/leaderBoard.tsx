@@ -16,6 +16,7 @@ import GlowHeader from "@/src/ui/leaderboard/GlowHeader";
 import SearchBar from "@/src/ui/leaderboard/SearchBar";
 import StatusCard from "@/src/ui/leaderboard/StatusCard";
 import PlayerRow from "@/src/ui/leaderboard/PlayerRow";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale"; // <-- Added import
 
 type PathLeaderboardItem = {
   pathId: string | { _id: string; name?: string };
@@ -38,7 +39,7 @@ function normalizeBoardConf(value?: string | number): "10" | "20" {
 }
 
 function getBoardDisplayName(boardConf: "10" | "20") {
-  return boardConf === "10" ? "NextPeg Lite" : "NextPeq";
+  return boardConf === "10" ? "NextPeg Lite" : "NextPeg";
 }
 
 function getPathIdString(p: PathLeaderboardItem["pathId"]) {
@@ -54,16 +55,19 @@ function getPathName(p: PathLeaderboardItem) {
 export default function LeaderboardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ boardConf?: string }>();
+  
   const { width } = useWindowDimensions();
+  const scale = useResponsiveScale();
+  const s = useMemo(() => getResponsiveStyles(scale), [scale]);
 
   const isTablet = width >= 768;
 
-  const ui = {
-    contentPadding: isTablet ? 24 : 16,
-    topGap: isTablet ? 14 : 10,
-    sectionGap: isTablet ? 14 : 10,
-    radius: isTablet ? 18 : 16,
-  };
+  const ui = useMemo(() => ({
+    contentPadding: isTablet ? scale(24) : scale(16),
+    topGap: isTablet ? scale(14) : scale(10),
+    sectionGap: isTablet ? scale(14) : scale(10),
+    radius: isTablet ? scale(18) : scale(16),
+  }), [isTablet, scale]);
 
   const boardConf = useMemo(
     () => normalizeBoardConf(params.boardConf),
@@ -223,7 +227,7 @@ export default function LeaderboardScreen() {
               message={query ? "No matching paths found." : "No paths available yet."}
             />
           ) : (
-            <View style={{ marginTop: 14, gap: ui.sectionGap }}>
+            <View style={{ marginTop: scale(14), gap: ui.sectionGap }}>
               {!query ? (
                 <View style={s.topHint}>
                   <Text style={s.topHintText}>
@@ -233,23 +237,23 @@ export default function LeaderboardScreen() {
               ) : null}
 
               {showList.map((p, i) => (
-  <PlayerRow
-    key={`${getPathIdString(p.pathId)}-${p.rank}-${i}`}
-    rank={p.rank}
-    title={getPathName(p)}
-    subtitle={getPathIdString(p.pathId) ? `ID ${getPathIdString(p.pathId)}` : "ID —"}
-    value={p.plays}
-    valueLabel="PLAYS"
-    onPress={() =>
-      router.push({
-        pathname: "/(app)/leaderBoardPath",
-        params: {
-          pathId: getPathIdString(p.pathId),
-        },
-      })
-    }
-  />
-))}
+                <PlayerRow
+                  key={`${getPathIdString(p.pathId)}-${p.rank}-${i}`}
+                  rank={p.rank}
+                  title={getPathName(p)}
+                  subtitle={getPathIdString(p.pathId) ? `ID ${getPathIdString(p.pathId)}` : "ID —"}
+                  value={p.plays}
+                  valueLabel="PLAYS"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(app)/leaderBoardPath",
+                      params: {
+                        pathId: getPathIdString(p.pathId),
+                      },
+                    })
+                  }
+                />
+              ))}
             </View>
           )}
 
@@ -259,93 +263,98 @@ export default function LeaderboardScreen() {
             </View>
           ) : null}
 
-          <View style={{ height: 34 }} />
+          <View style={{ height: scale(34) }} />
         </ScrollView>
       </View>
     </ScreenLayout>
   );
 }
 
-const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
+const getResponsiveStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: "#FFFFFF",
+    },
 
-  content: {
-    paddingBottom: 10,
-  },
+    content: {
+      paddingBottom: s(10),
+    },
 
-  topBar: {
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-  },
+    topBar: {
+      marginBottom: s(8),
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "flex-start",
+    },
 
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    backgroundColor: "#F7F7F7",
-  },
+    backBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: s(8),
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      backgroundColor: "#F7F7F7",
+    },
 
-  backIcon: {
-    color: "#111111",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+    backIcon: {
+      color: "#111111",
+      fontSize: s(12),
+      fontWeight: "700",
+    },
 
-  backText: {
-    color: "#111111",
-    fontWeight: "700",
-  },
+    backText: {
+      color: "#111111",
+      fontWeight: "700",
+      fontSize: s(12),
+    },
 
-  boardBadgeWrap: {
-    alignItems: "flex-start",
-  },
+    boardBadgeWrap: {
+      alignItems: "flex-start",
+    },
 
-  boardBadge: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#111111",
-    backgroundColor: "#111111",
-  },
+    boardBadge: {
+      paddingVertical: s(10),
+      paddingHorizontal: s(14),
+      borderRadius: s(14),
+      borderWidth: 1,
+      borderColor: "#111111",
+      backgroundColor: "#111111",
+    },
 
-  boardBadgeText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    letterSpacing: 0.4,
-  },
+    boardBadgeText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      letterSpacing: 0.4,
+      fontSize: s(10),
+    },
 
-  topHint: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-    backgroundColor: "#F7F7F7",
-  },
+    topHint: {
+      paddingVertical: s(12),
+      paddingHorizontal: s(14),
+      borderRadius: s(16),
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+      backgroundColor: "#F7F7F7",
+    },
 
-  topHintText: {
-    color: "#6B6B6B",
-    fontWeight: "500",
-    lineHeight: 20,
-  },
+    topHintText: {
+      color: "#6B6B6B",
+      fontWeight: "500",
+      lineHeight: s(20),
+      fontSize: s(11),
+    },
 
-  loadMore: {
-    marginTop: 16,
-    alignItems: "center",
-  },
+    loadMore: {
+      marginTop: s(16),
+      alignItems: "center",
+    },
 
-  loadMoreText: {
-    color: "#6B6B6B",
-    fontWeight: "500",
-  },
-});
+    loadMoreText: {
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(12),
+    },
+  });

@@ -14,6 +14,7 @@ import {
 import { pathService } from "@/src/path/path.services";
 import { PathBoard, type PathStep } from "@/src/ui/routes/pathBoard";
 import { router, useLocalSearchParams } from "expo-router";
+import { useResponsiveScale } from "@/hooks/useResponsiveScale";
 
 type EditRouteDTO = {
   _id: string;
@@ -48,8 +49,10 @@ export default function RouteEditorVisualScreen() {
   const isEdit = !!pathId;
 
   const { width } = useWindowDimensions();
-  const isSmallPhone = width < 360;
   const isTablet = width >= 768;
+
+  const scale = useResponsiveScale();
+  const ui = useMemo(() => getResponsiveStyles(scale), [scale]);
 
   const [name, setName] = useState("");
   const [path, setPath] = useState<PathStep[]>([]);
@@ -122,6 +125,10 @@ export default function RouteEditorVisualScreen() {
       Alert.alert("Name required", "Give this route a name.");
       return;
     }
+    if (trimmed.length >16) {
+      Alert.alert("Name length exceeded", "Path name cannot exceed 16 characters.");
+      return;
+    }
 
     if (!path.length) {
       Alert.alert("Empty route", "Tap nodes to build a route first.");
@@ -141,7 +148,7 @@ export default function RouteEditorVisualScreen() {
         });
 
         Alert.alert("Updated", "Route updated successfully.", [
-          { text: "OK", onPress: () => router.push("/(app)/my-routes") },
+          { text: "OK", onPress: () => router.back() },
         ]);
         return;
       }
@@ -154,7 +161,7 @@ export default function RouteEditorVisualScreen() {
       } as any);
 
       Alert.alert("Saved", "Route saved successfully.", [
-        { text: "OK", onPress: () => router.push("/(app)/my-routes") },
+        { text: "OK", onPress: () => router.back() },
       ]);
     } catch (e: any) {
       Alert.alert("Error", e?.message || "Could not save route.");
@@ -167,7 +174,7 @@ export default function RouteEditorVisualScreen() {
     <ScreenLayout title="" subtitle="">
       <View style={ui.header}>
         <View style={{ flex: 1 }}>
-          <Text style={[ui.brand, { fontSize: isTablet ? 24 : 22 }]}>
+          <Text style={[ui.brand, { fontSize: isTablet ? scale(20) : scale(16) }]}>
             Route Forge
           </Text>
           <Text style={ui.subtitle}>
@@ -332,294 +339,304 @@ export default function RouteEditorVisualScreen() {
   );
 }
 
-const ui = StyleSheet.create({
-  header: {
-    marginTop: 6,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-  },
+const getResponsiveStyles = (s: (val: number) => number) =>
+  StyleSheet.create({
+    header: {
+      marginTop: s(6),
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: s(12),
+    },
 
-  brand: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
+    brand: {
+      color: "#111111",
+      fontWeight: "700",
+      letterSpacing: 0.2,
+    },
 
-  subtitle: {
-    marginTop: 4,
-    color: "#6B6B6B",
-    fontWeight: "500",
-  },
+    subtitle: {
+      marginTop: s(4),
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(11),
+    },
 
-  saveBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "#111111",
-    borderWidth: 1,
-    borderColor: "#111111",
-  },
+    saveBtn: {
+      paddingVertical: s(12),
+      paddingHorizontal: s(14),
+      borderRadius: s(16),
+      backgroundColor: "#111111",
+      borderWidth: 1,
+      borderColor: "#111111",
+    },
 
-  saveText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
+    saveText: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      fontSize: s(10),
+    },
 
-  panel: {
-    marginTop: 14,
-    borderRadius: 22,
-    padding: 14,
-    backgroundColor: "#F7F7F7",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-  },
+    panel: {
+      marginTop: s(14),
+      borderRadius: s(22),
+      padding: s(14),
+      backgroundColor: "#F7F7F7",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+    },
 
-  label: {
-    color: "#6B6B6B",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    fontSize: 12,
-  },
+    label: {
+      color: "#6B6B6B",
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      fontSize: s(10),
+    },
 
-  input: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    backgroundColor: "#FFFFFF",
-    color: "#111111",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontWeight: "600",
-  },
+    input: {
+      marginTop: s(10),
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      backgroundColor: "#FFFFFF",
+      color: "#111111",
+      borderRadius: s(16),
+      paddingHorizontal: s(12),
+      paddingVertical: s(12),
+      fontWeight: "600",
+      fontSize: s(11),
+    },
 
-  hudRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
+    hudRow: {
+      marginTop: s(12),
+      flexDirection: "row",
+      gap: s(10),
+      alignItems: "center",
+    },
 
-  hudPill: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+    hudPill: {
+      flex: 1,
+      borderRadius: s(16),
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
 
-  hudKey: {
-    color: "#7A7A7A",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    fontSize: 11,
-  },
+    hudKey: {
+      color: "#7A7A7A",
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      fontSize: s(11),
+    },
 
-  hudVal: {
-    color: "#111111",
-    fontWeight: "700",
-    fontSize: 14,
-  },
+    hudVal: {
+      color: "#111111",
+      fontWeight: "700",
+      fontSize: s(11),
+    },
 
-  clearBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    backgroundColor: "rgba(225,85,114,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(225,85,114,0.28)",
-  },
+    clearBtn: {
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      borderRadius: s(16),
+      backgroundColor: "rgba(225,85,114,0.08)",
+      borderWidth: 1,
+      borderColor: "rgba(225,85,114,0.28)",
+    },
 
-  clearText: {
-    color: "#C44760",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    fontSize: 12,
-  },
+    clearText: {
+      color: "#C44760",
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      fontSize: s(10),
+    },
 
-  summary: {
-    marginTop: 10,
-    color: "#444444",
-    fontWeight: "600",
-  },
+    summary: {
+      marginTop: s(10),
+      color: "#444444",
+      fontWeight: "600",
+      fontSize: s(11),
+    },
 
-  footer: {
-    marginTop: 14,
-    marginBottom:40,
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "#F7F7F7",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-  },
+    footer: {
+      marginTop: s(14),
+      marginBottom: s(40),
+      borderRadius: s(18),
+      padding: s(14),
+      backgroundColor: "#F7F7F7",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+    },
 
-  footerTitle: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.8,
-  },
+    footerTitle: {
+      color: "#111111",
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      fontSize: s(11),
+    },
 
-  footerHint: {
-    marginTop: 6,
-    color: "#6B6B6B",
-    fontWeight: "500",
-  },
+    footerHint: {
+      marginTop: s(6),
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(11),
+    },
 
-  panelTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 10,
-  },
+    panelTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      gap: s(10),
+    },
 
-  toggleRow: {
-    marginTop: 12,
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E3E3E3",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
+    toggleRow: {
+      marginTop: s(12),
+      borderRadius: s(18),
+      paddingVertical: s(12),
+      paddingHorizontal: s(12),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#E3E3E3",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: s(10),
+    },
 
-  toggleLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+    toggleLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: s(10),
+    },
 
-  checkBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#D0D0D0",
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    checkBox: {
+      width: s(22),
+      height: s(22),
+      borderRadius: s(8),
+      borderWidth: 1,
+      borderColor: "#D0D0D0",
+      backgroundColor: "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  checkBoxOn: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
+    checkBoxOn: {
+      backgroundColor: "#111111",
+      borderColor: "#111111",
+    },
 
-  checkMark: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
-    lineHeight: 16,
-  },
+    checkMark: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+      fontSize: s(11),
+      lineHeight: s(16),
+    },
 
-  toggleTitle: {
-    color: "#111111",
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
+    toggleTitle: {
+      color: "#111111",
+      fontWeight: "700",
+      letterSpacing: 0.2,
+      fontSize: s(11),
+    },
 
-  toggleHint: {
-    marginTop: 3,
-    color: "#6B6B6B",
-    fontWeight: "500",
-    fontSize: 12,
-  },
+    toggleHint: {
+      marginTop: s(3),
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(10),
+    },
 
-  badge: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
+    badge: {
+      paddingVertical: s(8),
+      paddingHorizontal: s(10),
+      borderRadius: s(14),
+      borderWidth: 1,
+    },
 
-  badgeOn: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
+    badgeOn: {
+      backgroundColor: "#111111",
+      borderColor: "#111111",
+    },
 
-  badgeOff: {
-    backgroundColor: "#EDEDED",
-    borderColor: "#D9D9D9",
-  },
+    badgeOff: {
+      backgroundColor: "#EDEDED",
+      borderColor: "#D9D9D9",
+    },
 
-  badgeText: {
-    fontWeight: "700",
-    letterSpacing: 0.8,
-    fontSize: 11,
-  },
+    badgeText: {
+      fontWeight: "700",
+      letterSpacing: 0.8,
+      fontSize: s(11),
+    },
 
-  badgeTextOn: {
-    color: "#FFFFFF",
-  },
+    badgeTextOn: {
+      color: "#FFFFFF",
+    },
 
-  badgeTextOff: {
-    color: "#444444",
-  },
+    badgeTextOff: {
+      color: "#444444",
+    },
 
-  loadingRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
+    loadingRow: {
+      marginTop: s(12),
+      flexDirection: "row",
+      alignItems: "center",
+      gap: s(10),
+    },
 
-  loadingText: {
-    color: "#6B6B6B",
-    fontWeight: "500",
-  },
+    loadingText: {
+      color: "#6B6B6B",
+      fontWeight: "500",
+      fontSize: s(11),
+    },
 
-  boardRow: {
-    marginTop: 12,
-    gap: 10,
-  },
+    boardRow: {
+      marginTop: s(12),
+      gap: s(10),
+    },
 
-  boardPills: {
-    flexDirection: "row",
-    gap: 10,
-  },
+    boardPills: {
+      flexDirection: "row",
+      gap: s(10),
+    },
 
-  boardPill: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#D9D9D9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    boardPill: {
+      flex: 1,
+      borderRadius: s(16),
+      paddingVertical: s(10),
+      paddingHorizontal: s(12),
+      backgroundColor: "#FFFFFF",
+      borderWidth: 1,
+      borderColor: "#D9D9D9",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  boardPillOn: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
+    boardPillOn: {
+      backgroundColor: "#111111",
+      borderColor: "#111111",
+    },
 
-  boardPillText: {
-    color: "#444444",
-    fontWeight: "700",
-    letterSpacing: 0.6,
-  },
+    boardPillText: {
+      color: "#444444",
+      fontWeight: "700",
+      letterSpacing: 0.6,
+      fontSize: s(11),
+    },
 
-  boardPillTextOn: {
-    color: "#FFFFFF",
-  },
+    boardPillTextOn: {
+      color: "#FFFFFF",
+    },
 
-  boardHint: {
-    marginTop: 2,
-    color: "#7A7A7A",
-    fontWeight: "500",
-    fontSize: 12,
-  },
-});
+    boardHint: {
+      marginTop: s(2),
+      color: "#7A7A7A",
+      fontWeight: "500",
+      fontSize: s(10),
+    },
+  });
