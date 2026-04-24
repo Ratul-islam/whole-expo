@@ -442,7 +442,7 @@ export default function RegisterScreen() {
                   <View style={styles.divider} />
                 </View>
 
-                <Pressable
+                {/* <Pressable
                   style={({ pressed }) => [
                     styles.socialButton,
                     {
@@ -463,9 +463,9 @@ export default function RegisterScreen() {
                       <Text style={styles.socialText}>Continue with Google</Text>
                     </>
                   )}
-                </Pressable>
+                </Pressable> */}
 
-                <Pressable
+                {/* <Pressable
                   style={({ pressed }) => [
                     styles.socialButton,
                     {
@@ -486,7 +486,7 @@ export default function RegisterScreen() {
                       <Text style={styles.socialText}>Continue with Apple</Text>
                     </>
                   )}
-                </Pressable>
+                </Pressable> */}
               </>
             )}
 

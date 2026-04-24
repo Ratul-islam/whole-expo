@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Duonamic Arena",
-    "slug": "Duonamic-Arena",
+    "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.jpeg",
@@ -11,7 +11,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow this app to access your camera to scan the device QR code."
+        "NSCameraUsageDescription": "Allow this app to access your camera to scan the device QR code.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.ratul404.frontend"
     },
@@ -72,6 +73,7 @@
       "eas": {
         "projectId": "aecfcb9d-044a-477b-acba-e528d1c1afa3"
       }
-    }
+    },
+    "owner": "ratul404"
   }
 }
