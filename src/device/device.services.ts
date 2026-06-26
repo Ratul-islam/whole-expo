@@ -22,6 +22,13 @@ function getWsBaseUrl(): string {
 }
 
 export const deviceService = {
+  get_all_connected_modules: async (macAddress:string) => {
+    const url = ENDPOINTS.DEVICE.MODULES.GET_ALL_CONNECTED.replace(":macAddress", encodeURIComponent(macAddress));
+    const { data } = await api.get(url);
+    return data;
+  },
+
+  
   status: async () => {
     const { data } = await api.get(ENDPOINTS.DEVICE.STATUS);
     return data;

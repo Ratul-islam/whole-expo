@@ -71,6 +71,9 @@ export default function MainMenuScreen() {
   const { device, connected, wsOnline, refreshDevice, connectWsIfConnected, deviceRev } =
     useDeviceLive();
 
+
+    console.log(device?.deviceSecret)
+
   const renderCount = useRef(0);
   renderCount.current += 1;
 
@@ -262,7 +265,7 @@ export default function MainMenuScreen() {
       pathname: "/(app)/my-routes",
       params: {
         deviceId: device.deviceId,
-        deviceSecret: device.deviceSecret,
+        macAddress: device.deviceSecret,
       },
     });
   };

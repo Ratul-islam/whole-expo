@@ -1,115 +1,104 @@
 import React, { useMemo } from "react";
-import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import type { HoleLayoutItem, BoardType } from "./boardConfig";
+import { StyleSheet, Text, View, useWindowDimensions, ActivityIndicator } from "react-native";
 
 type HandBit = 0 | 1;
 type PathStep = [number, HandBit];
 
-type PositionedHole = HoleLayoutItem & {
+export interface HolePosition {
+  index: number;
   x: number;
   y: number;
+}
+
+export interface HardwareModule {
+  _id: string;
+  index: number;
+  isActive: boolean;
+  holePositions: HolePosition[];
+}
+
+type ProjectedPeg = {
+  globalIndex: number;
+  displayNumber: number;
+  pixelX: number;
+  pixelY: number;
 };
 
 export function BoardPreview({
-  boardType,
-  layout,
-  path,
+  modules = [],
+  path = [],
+  loading = false,
 }: {
-  boardType: BoardType;
-  layout: HoleLayoutItem[];
+  modules: HardwareModule[];
   path: PathStep[];
+  loading?: boolean;
 }) {
   const { width } = useWindowDimensions();
-
-  const isSmallPhone = width < 360;
   const isTablet = width >= 768;
-
   const containerWidth = Math.min(width - (isTablet ? 72 : 40), isTablet ? 620 : 360);
 
-  const holeSize = useMemo(() => {
-    if (boardType === "10") {
-      return Math.min(56, Math.max(40, containerWidth / 6));
-    }
-    return Math.min(46, Math.max(31, containerWidth / 8.8));
-  }, [boardType, containerWidth]);
+  // --- CARTESIAN CAD NORMALIZER ---
+  const { projectedPegs, boardWidth, boardHeight, holeSize } = useMemo(() => {
+    const flat: Array<{ rawX: number; rawY: number }> = [];
 
-  const gapX = boardType === "10" ? holeSize * 0.22 : holeSize * 0.16;
-  const gapY = boardType === "10" ? holeSize * 0.22 : holeSize * 0.22;
+    // 1. Flatten variable modules strictly sorted by hardware index
+    const activeMods = [...modules]
+      .filter((m) => m.isActive !== false)
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 
-  const leftPanelWidth = boardType === "20" ? holeSize * 1.28 : 0;
-  const leftPanelGap = boardType === "20" ? holeSize * 0.28 : 0;
-
-  const positioned = useMemo<PositionedHole[]>(() => {
-    if (boardType === "10") {
-      const rowCounts = [3, 4, 3];
-      const maxCols = 4;
-
-      return layout.map((item) => {
-        const count = rowCounts[item.row];
-        const rowWidth = count * holeSize + (count - 1) * gapX;
-        const fullWidth = maxCols * holeSize + (maxCols - 1) * gapX;
-        const startX = (fullWidth - rowWidth) / 2;
-
-        const rowIndexMap =
-          item.row === 0
-            ? { 1: 0, 2: 1, 3: 2 }
-            : item.row === 1
-            ? { 4: 0, 5: 1, 6: 2, 7: 3 }
-            : { 8: 0, 9: 1, 10: 2 };
-
-        const visualIndex =
-          rowIndexMap[item.displayId as keyof typeof rowIndexMap] ?? 0;
-
-        return {
-          ...item,
-          x: startX + visualIndex * (holeSize + gapX),
-          y: item.row * (holeSize + gapY),
-        };
+    activeMods.forEach((mod) => {
+      const sortedHoles = [...(mod.holePositions || [])].sort((a, b) => a.index - b.index);
+      sortedHoles.forEach((hole) => {
+        flat.push({ rawX: hole.x, rawY: hole.y });
       });
+    });
+
+    if (flat.length === 0) {
+      return { projectedPegs: [], boardWidth: containerWidth, boardHeight: 220, holeSize: 38 };
     }
 
-    const rowCounts = [3, 4, 6, 4, 3];
-    const maxCols = 6;
-    const fullWidth = maxCols * holeSize + (maxCols - 1) * gapX;
+    // 2. Discover physical millimeter bounds
+    const xs = flat.map((h) => h.rawX);
+    const ys = flat.map((h) => h.rawY);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
 
-    return layout.map((item) => {
-      const count = rowCounts[item.row];
-      const rowWidth = count * holeSize + (count - 1) * gapX;
-      const startX = leftPanelWidth + leftPanelGap + (fullWidth - rowWidth) / 2;
+    const spanX = Math.max(1, maxX - minX);
+    const spanY = Math.max(1, maxY - minY);
 
-      const rowIndexMap =
-        item.row === 0
-          ? { 1: 0, 2: 1, 3: 2 }
-          : item.row === 1
-          ? { 4: 0, 5: 1, 6: 2, 7: 3 }
-          : item.row === 2
-          ? { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5 }
-          : item.row === 3
-          ? { 14: 0, 15: 1, 16: 2, 17: 3 }
-          : { 18: 0, 19: 1, 20: 2 };
+    // 3. Project millimeters onto responsive screen pixels
+    const calcHoleSize = Math.min(52, Math.max(32, containerWidth / (Math.sqrt(flat.length) * 1.5)));
+    const pad = calcHoleSize * 0.85;
 
-      const visualIndex =
-        rowIndexMap[item.displayId as keyof typeof rowIndexMap] ?? 0;
+    const availableDrawWidth = containerWidth - pad * 2;
+    const physicalRatio = spanY / spanX;
+    
+    const boundedDrawHeight = Math.max(160, Math.min(460, availableDrawWidth * physicalRatio));
+    const finalCanvasHeight = boundedDrawHeight + pad * 2;
+
+    const pegs: ProjectedPeg[] = flat.map((item, idx) => {
+      const normX = (item.rawX - minX) / spanX;
+      const normY = (item.rawY - minY) / spanY;
 
       return {
-        ...item,
-        x: startX + visualIndex * (holeSize + gapX),
-        y: item.row * (holeSize + gapY),
+        globalIndex: idx,
+        displayNumber: idx + 1,
+        pixelX: pad + normX * availableDrawWidth - calcHoleSize / 2,
+        pixelY: pad + normY * boundedDrawHeight - calcHoleSize / 2,
       };
     });
-  }, [boardType, layout, holeSize, gapX, gapY, leftPanelWidth, leftPanelGap]);
 
-  const boardWidth = useMemo(() => {
-    if (boardType === "10") {
-      return 4 * holeSize + 3 * gapX;
-    }
-    return leftPanelWidth + leftPanelGap + (6 * holeSize + 5 * gapX);
-  }, [boardType, holeSize, gapX, leftPanelWidth, leftPanelGap]);
+    return {
+      projectedPegs: pegs,
+      boardWidth: containerWidth,
+      boardHeight: finalCanvasHeight,
+      holeSize: calcHoleSize,
+    };
+  }, [modules, containerWidth]);
 
-  const boardHeight = useMemo(() => {
-    return (boardType === "10" ? 3 : 5) * holeSize + ((boardType === "10" ? 2 : 4) * gapY);
-  }, [boardType, holeSize, gapY]);
-
+  // Link incoming path steps to flattened global index
   const selectionMap = useMemo(() => {
     const map = new Map<number, { positions: number[]; lastPos: number; lastHand: HandBit }>();
 
@@ -117,9 +106,7 @@ export function BoardPreview({
       const idx = Number(step?.[0]);
       const hand = Number(step?.[1]) as HandBit;
 
-      if (!Number.isFinite(idx)) return;
-      if (idx < 0 || idx >= layout.length) return;
-      if (hand !== 0 && hand !== 1) return;
+      if (!Number.isFinite(idx) || hand !== 0 && hand !== 1) return;
 
       const existing = map.get(idx);
       if (!existing) {
@@ -132,94 +119,39 @@ export function BoardPreview({
     });
 
     return map;
-  }, [path, layout.length]);
+  }, [path]);
+
+  if (loading) {
+    return (
+      <View style={[s.boardWrap, { width: boardWidth, height: 220, justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="small" color="#111" />
+        <Text style={{ marginTop: 8, fontSize: 11, color: "#666", fontWeight: "600" }}>Rendering CAD projection...</Text>
+      </View>
+    );
+  }
+
+  if (projectedPegs.length === 0) {
+    return (
+      <View style={[s.boardWrap, { width: boardWidth, height: 160, justifyContent: "center", alignItems: "center" }]}>
+        <Text style={{ color: "#999", fontSize: 12, fontWeight: "600" }}>No physical hold coordinates found.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[s.boardWrap, { width: boardWidth, height: boardHeight }]}>
-      {boardType === "10" ? (
-        <>
-          <View
-            style={[
-              s.liteOutline,
-              {
-                width: boardWidth,
-                height: boardHeight,
-              },
-            ]}
-          />
-          <View
-            style={[
-              s.liteDiagonalTop,
-              {
-                width: holeSize * 1.42,
-                left: -holeSize * 0.9,
-                top: holeSize * 0.04,
-              },
-            ]}
-          />
-          <View
-            style={[
-              s.liteDiagonalBottom,
-              {
-                width: holeSize * 1.42,
-                left: -holeSize * 0.9,
-                bottom: holeSize * 0.04,
-              },
-            ]}
-          />
-        </>
-      ) : (
-        <View
-          style={[
-            s.ledPanel,
-            {
-              width: leftPanelWidth,
-              height: holeSize * 1.06,
-              left: 0,
-              top: holeSize * 0.06,
-            },
-          ]}
-        >
-          <Text style={s.ledPanelText}>LED{"\n"}PANEL</Text>
-        </View>
-      )}
-
-      {positioned.map((item) => {
-        const sel = selectionMap.get(item.valueIndex);
+      {projectedPegs.map((item) => {
+        const sel = selectionMap.get(item.globalIndex);
         const on = !!sel;
 
         return (
           <View
-            key={item.valueIndex}
-            style={[
-              s.holeWrap,
-              {
-                width: holeSize,
-                height: holeSize,
-                left: item.x,
-                top: item.y,
-              },
-            ]}
+            key={item.globalIndex}
+            style={[s.holeWrap, { width: holeSize, height: holeSize, left: item.pixelX, top: item.pixelY }]}
           >
-            <View
-              style={[
-                s.node,
-                {
-                  width: holeSize,
-                  height: holeSize,
-                  borderRadius: holeSize / 2,
-                },
-                on && s.nodeOn,
-              ]}
-            >
-              <Text
-                style={[
-                  s.idx,
-                  { fontSize: isTablet ? 14 : isSmallPhone ? 11 : 13 },
-                  on && s.idxOn,
-                ]}
-              >
-                {item.displayId}
+            <View style={[s.node, { width: holeSize, height: holeSize, borderRadius: holeSize / 2 }, on && s.nodeOn]}>
+              <Text style={[s.idx, { fontSize: isTablet ? 14 : 11 }, on && s.idxOn]}>
+                {item.displayNumber}
               </Text>
 
               {on ? (
@@ -252,114 +184,22 @@ const s = StyleSheet.create({
     alignSelf: "center",
     position: "relative",
     marginBottom: 14,
-  },
-
-  liteOutline: {
-    position: "absolute",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#3A3A3A",
+    borderColor: "#E9ECEF",
   },
-  liteDiagonalTop: {
-    position: "absolute",
-    height: 1,
-    backgroundColor: "#3A3A3A",
-    transform: [{ rotate: "-54deg" }],
-  },
-  liteDiagonalBottom: {
-    position: "absolute",
-    height: 1,
-    backgroundColor: "#3A3A3A",
-    transform: [{ rotate: "54deg" }],
-  },
-
-  ledPanel: {
-    position: "absolute",
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ledPanelText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "500",
-    textAlign: "center",
-    lineHeight: 12,
-  },
-
-  holeWrap: {
-    position: "absolute",
-  },
-
-  node: {
-    backgroundColor: "#D9D9D9",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  nodeOn: {
-    borderWidth: 2,
-    borderColor: "#3B82F6",
-    backgroundColor: "#CFCFCF",
-  },
-
-  idx: {
-    color: "#111111",
-    fontWeight: "700",
-  },
-  idxOn: {
-    textDecorationLine: "underline",
-  },
-
-  badge: {
-    position: "absolute",
-    top: -6,
-    right: -6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#111111",
-  },
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-
-  hand: {
-    position: "absolute",
-    bottom: -6,
-    paddingHorizontal: 6,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  handL: {
-    backgroundColor: "#2563EB",
-  },
-  handR: {
-    backgroundColor: "#ff0000",
-  },
-  handText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-
-  count: {
-    position: "absolute",
-    top: -4,
-    left: -4,
-    backgroundColor: "#111111",
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 6,
-  },
-  countText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "700",
-  },
+  holeWrap: { position: "absolute" },
+  node: { backgroundColor: "#D9D9D9", alignItems: "center", justifyContent: "center", position: "relative" },
+  nodeOn: { borderWidth: 2, borderColor: "#3B82F6", backgroundColor: "#CFCFCF" },
+  idx: { color: "#111111", fontWeight: "700" },
+  idxOn: { textDecorationLine: "underline" },
+  badge: { position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: "#111111" },
+  badgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
+  hand: { position: "absolute", bottom: -6, paddingHorizontal: 6, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  handL: { backgroundColor: "#2563EB" },
+  handR: { backgroundColor: "#ff0000" },
+  handText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
+  count: { position: "absolute", top: -4, left: -4, backgroundColor: "#111111", paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6 },
+  countText: { color: "#FFFFFF", fontSize: 9, fontWeight: "700" },
 });

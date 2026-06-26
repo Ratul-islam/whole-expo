@@ -3,6 +3,7 @@ import { AuthTokens } from "../auth/auth.types";
 export type newPathRequest = {
   name: string;
   path: any;
+  macAddress: string;
 };
 
 export type deletePathRequest = {

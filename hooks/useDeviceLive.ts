@@ -16,11 +16,11 @@ export type LiveSessionDoc = {
   _id: string;
   sessionId: string;
   userId: string;
-  control:string;
+  control: string;
   deviceId: string;
   deviceSecret: string;
   status: SessionStatus;
-  time:number;
+  time: number;
   score: number;
   correct: number;
   wrong: number;
@@ -57,34 +57,55 @@ function deepFreeze<T>(obj: T): T {
   return obj;
 }
 
+/**
+ * Safely extracts an ID string whether Mongoose handed us:
+ * a raw string, an ObjectId instance, or a populated { _id: "..." } object.
+ */
+function extractId(val: any): string {
+  if (!val) return "";
+  if (typeof val === "string" || typeof val === "number") return String(val);
+  if (typeof val === "object") {
+    return String(val._id ?? val.id ?? val.$oid ?? "");
+  }
+  return "";
+}
+
 function normalizeDeviceStatus(res: any): DeviceStatusDoc | null {
   const d = res?.data?.data ?? res?.data ?? res ?? null;
   if (!d || typeof d !== "object") return null;
-  if (!d.deviceId || !d.deviceSecret) return null;
+
+  const docId = extractId(d._id ?? d.id);
+  if (!docId) return null;
+
+  // Fallback map: DB "_id" -> Frontend "deviceId"
+  const resolvedDeviceId = extractId(d.deviceId) || docId || String(d.macAddress ?? "");
+  
+  // Keep memoized connected=true alive even when WS omits the secret
+  const resolvedSecret = String(d.deviceSecret ?? "ws_omitted_secret");
 
   const s = d.sessionId && typeof d.sessionId === "object" ? d.sessionId : null;
 
   const out: DeviceStatusDoc = {
-    _id: String(d._id ?? ""),
-    deviceId: String(d.deviceId),
-    deviceSecret: String(d.deviceSecret),
-    isAvailable: Boolean(d.isAvailable),
+    _id: docId,
+    deviceId: resolvedDeviceId,
+    deviceSecret: resolvedSecret,
+    isAvailable: Boolean(d.isAvailable ?? d.isOnline ?? false),
     createdAt: String(d.createdAt ?? ""),
     updatedAt: String(d.updatedAt ?? ""),
     __v: Number(d.__v ?? 0),
-    userId: String(d.userId ?? ""),
+    userId: extractId(d.userId ?? s?.userId ?? d.admin),
     sessionId: s
       ? {
-          _id: String(s._id ?? ""),
-          sessionId: String(s.sessionId ?? s.session_id ?? ""),
-          userId: String(s.userId ?? ""),
-          deviceId: String(s.deviceId ?? ""),
-          deviceSecret: String(s.deviceSecret ?? ""),
+          _id: extractId(s._id),
+          sessionId: extractId(s.sessionId ?? s._id),
+          userId: extractId(s.userId),
+          deviceId: extractId(s.deviceId ?? resolvedDeviceId),
+          deviceSecret: String(s.deviceSecret ?? resolvedSecret),
           status: (s.status ?? "starting") as SessionStatus,
           score: Number(s.score ?? 0),
-          control: s.control,
+          control: String(s.control ?? "online"),
           correct: Number(s.correct ?? 0),
-          time: Number(s.time?? 0),
+          time: Number(s.time ?? 0),
           wrong: Number(s.wrong ?? 0),
           startedAt: s.startedAt ? String(s.startedAt) : undefined,
           createdAt: s.createdAt ? String(s.createdAt) : undefined,
@@ -115,7 +136,6 @@ export function useDeviceLive() {
   const [wsOnline, setWsOnline] = useState(false);
 
   const [deviceRev, setDeviceRev] = useState(0);
-
   const [renderTick, setRenderTick] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -185,28 +205,15 @@ export function useDeviceLive() {
     setRenderTick((x) => x + 1);
 
     const base = api.defaults.baseURL || "";
-    console.log("[WS] api.defaults.baseURL =", base);
-
-    if (!base) {
-      console.log("[WS] ❌ missing baseURL");
-      return;
-    }
+    if (!base) return;
 
     const access = await tokenStorage.getAccess();
-    console.log("[WS] access token exists =", !!access);
-
     if (!access) {
       setWsOnline(false);
       return;
     }
 
-    const existingState = wsRef.current?.readyState;
-    if (typeof existingState === "number") {
-      console.log("[WS] existing ws readyState =", existingState);
-    }
-
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log("[WS] already OPEN ✅");
       setWsOnline(true);
       return;
     }
@@ -215,20 +222,10 @@ export function useDeviceLive() {
       wsRef.current?.close();
     } catch {}
     wsRef.current = null;
-
     closedRef.current = false;
 
-    const wsBase = httpToWs(base); // base contains /api/v1
-    /**
-     * IMPORTANT:
-     * If your backend WS route is under /api/v1/device/live,
-     * you MUST keep /api/v1 here.
-     *
-     * If backend WS is /device/live (no /api/v1), then remove /api/v1.
-     */
+    const wsBase = httpToWs(base);
     const url = `${wsBase}/device/live?token=${encodeURIComponent(access)}`;
-
-    console.log("[WS] WS connecting →", url.replace(access, "***"));
 
     let ws: WebSocket;
     try {
@@ -253,24 +250,21 @@ export function useDeviceLive() {
       } catch {}
 
       console.log("[WS] message:", payload);
-
       setWsOnline(true);
 
-      // ✅ normalize
       let next: DeviceStatusDoc | null = null;
 
-      if (payload?.type === "device_snapshot") {
+      // Explicitly capture "device_update" along with "device_snapshot"
+      if (payload?.type === "device_snapshot" || payload?.type === "device_update") {
         next = payload?.data ? normalizeDeviceStatus({ data: payload.data }) : null;
       } else if (payload?.status === "success" && payload?.data) {
         next = normalizeDeviceStatus({ data: payload.data });
       } else if (payload?.data) {
-        // fallback
         next = normalizeDeviceStatus({ data: payload.data });
       }
 
       if (!next) return;
 
-      // ✅ ALWAYS set a new reference + bump revision so UI must update
       setDevice(() => next);
       setDeviceRev((x) => x + 1);
       setRenderTick((x) => x + 1);
@@ -280,42 +274,31 @@ export function useDeviceLive() {
         score: next.sessionId?.score,
         correct: next.sessionId?.correct,
         wrong: next.sessionId?.wrong,
-        updatedAt: next.sessionId?.updatedAt,
       });
     };
 
     ws.onerror = (e) => {
-      console.log("[WS] ERROR ❌", e);
       setWsOnline(false);
       scheduleRetry("ws-error", connectWsIfConnected);
     };
 
     ws.onclose = (e) => {
-      console.log("[WS] CLOSED 🧯", e);
       setWsOnline(false);
       scheduleRetry("ws-close", connectWsIfConnected);
     };
   }, [closeWs, scheduleRetry]);
 
-  // initial
   useEffect(() => {
     (async () => {
-      console.log("[WS] hook mount → initial refresh + connect");
       await refreshDevice();
       await connectWsIfConnected();
     })();
-
     return () => closeWs("unmount");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // resume from background
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
-      if (st === "active") {
-        console.log("[WS] AppState active → connectWsIfConnected()");
-        connectWsIfConnected();
-      }
+      if (st === "active") connectWsIfConnected();
     });
     return () => {
       // @ts-ignore
@@ -328,11 +311,8 @@ export function useDeviceLive() {
     deviceLoading,
     connected,
     wsOnline,
-
-    // ✅ KEY FIX
     deviceRev,
     renderTick,
-
     refreshDevice,
     connectWsIfConnected,
     closeWs,

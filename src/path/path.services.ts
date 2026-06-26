@@ -12,6 +12,8 @@ import type {
 
 export const pathService = {
   addNewPath: async (payload: newPathRequest) => {
+
+    console.log(payload)
     const { data } = await api.post<newPathResponse>(ENDPOINTS.PATH.NEW, payload);
     return data;
   },

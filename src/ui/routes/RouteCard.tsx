@@ -35,6 +35,8 @@ export function RouteCard(props: {
     actionSub: isTablet ? 11.5 : 11,
   };
 
+  console.log("from item "+JSON.stringify(item))
+
   return (
     <Pressable onPress={onPress} style={styles.press}>
       <View style={[styles.frameOuter, { borderRadius: ui.radius }]}>

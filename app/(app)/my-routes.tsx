@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { ScreenLayout } from "../../src/ui/app/screenLayout";
 import { EmptyState } from "../../src/ui/app/emptyState";
@@ -103,9 +103,11 @@ export default function MyRoutesScreen() {
   // --- DEVICE CONNECTION & UPLOAD LOGIC ---
   const isDeviceConnected = !!(
     deviceConnected?.deviceId &&
-    deviceConnected?.deviceSecret &&
-    deviceConnected?.boardConf
+    deviceConnected?.deviceSecret
   );
+
+  console.log(data)
+
 
   const isOnlineMode = deviceConnected?.control === "online";
   
@@ -139,7 +141,10 @@ export default function MyRoutesScreen() {
     } as any;
   };
 
-  const goCreate = () => router.replace("/(app)/route-editor");
+
+    const params = useLocalSearchParams<{ pathId?: string; macAddress?: string }>();
+
+  const goCreate = () => router.replace({pathname:"/(app)/route-editor", params:{macAddress: params.macAddress}});
 
   const resetPaging = () => {
     setPage(1);
@@ -154,14 +159,13 @@ export default function MyRoutesScreen() {
       const res = await deviceService.status();
       const payload = unwrapPayload(res);
 
-      const connectedFlag = payload?.connected;
-      const deviceId = pickKey(payload, ["deviceId", "deviceID", "device_id"]);
-      const deviceSecret = pickKey(payload, ["deviceSecret", "device_secret"]);
-      const rawBoard = pickKey(payload, ["boardConf", "board_conf", "boardCONF"]) as string | undefined;
+      console.log(payload)
 
-      const boardConf = rawBoard ? normalizeBoardConf(rawBoard) : undefined;
+      const connectedFlag = !payload?.isAvailable;
+      const deviceId = payload.deviceId
+      const deviceSecret = payload.deviceSecret
+
       const control = res?.data?.sessionId?.control;
-
       if (connectedFlag === false || !deviceId || !deviceSecret) {
         setDeviceConnected(null);
         return;
@@ -170,12 +174,10 @@ export default function MyRoutesScreen() {
       setDeviceConnected({
         deviceId,
         deviceSecret,
-        boardConf,
         sessionId: payload.sessionId._id,
         control,
       } as any);
 
-      if (boardConf) setQuery(boardConf);
     } catch (err) {
       console.log("device status error:", err);
       setDeviceConnected(null);
@@ -183,6 +185,7 @@ export default function MyRoutesScreen() {
       setDeviceReady(true);
     }
   };
+
 
   const handleSelectRoute = async (item: RouteCardModel) => {
     setSelected(item);
@@ -218,6 +221,8 @@ export default function MyRoutesScreen() {
       // Extract array properly handling both CREATED and SAVED payload structures
       const responsePayload = res?.data?.list ?? res?.data;
       const dataRaw = safeArr<any>(responsePayload);
+
+
 
       const backendHasPaging =
         !!meta &&
@@ -258,27 +263,28 @@ export default function MyRoutesScreen() {
         };
       });
 
+      
       const base = reset || fallbackAll.length === 0 ? normalized : fallbackAll;
       if (reset || fallbackAll.length === 0) setFallbackAll(normalized);
-
+      
       const filtered = base.filter((p: any) => {
         if (deviceBoard) {
           const docBoard = p?.boardConf ? normalizeBoardConf(p.boardConf) : "";
           return docBoard === deviceBoard;
         }
-
+        
         if (!q) return true;
         const hay = `${p.name} ${safeArr(p.path).length}`.toLowerCase();
         return hay.includes(q.toLowerCase());
       });
-
+      
       const start = (nextPage - 1) * LIMIT;
       const slice = filtered.slice(start, start + LIMIT).map(mapToModel);
-
+      
       setList((prev) => (reset ? slice : [...prev, ...slice]));
       setHasMore(start + LIMIT < filtered.length);
       setPage(nextPage + 1);
-
+      
       setLoading(false);
       setLoadingMore(false);
       setRefreshing(false);
@@ -291,7 +297,7 @@ export default function MyRoutesScreen() {
       setHasMore(false);
     }
   };
-
+  
   useEffect(() => {
     fetchDeviceStatus();
   }, []);
@@ -332,7 +338,6 @@ export default function MyRoutesScreen() {
 
   const onUpload = async () => {
     if (!selected) return;
-
     if (!isDeviceConnected) {
       throw new Error("Scan/connect a device to upload this route.");
     }
@@ -343,7 +348,6 @@ export default function MyRoutesScreen() {
     
     // Extract the exact pathId (rather than the saved path reference ID)
     const uploadId = (selected as any).targetPathId || selected.id;
-
     const res = await deviceService.loadPreset({
       id: deviceConnected.sessionId,
       pathId: uploadId,
@@ -566,9 +570,11 @@ export default function MyRoutesScreen() {
         }
       />
 
-      <PathBoardViewer
+<PathBoardViewer
         context="OWNER"
-        boardConf={selected?.boardConf}
+        pathId={(selected as any)?.pathId}
+        selectedId={(selected as any)?.deviceId || deviceConnected?.deviceId} // <-- Fixed typo + active wall fallback
+        macAddress={(selected as any)?.macAddress || params.macAddress}
         visible={!!selected}
         path={selected?.path || []}
         pathName={selected?.title || "Route"}
@@ -578,10 +584,7 @@ export default function MyRoutesScreen() {
         uploadLabel={uploadLabel}
         canToggleLeaderboard={tab === "CREATED"}
         isPublic={!!selected?.isPublic}
-        onToggleLeaderboard={() => {
-          if (!selected) return;
-          return toggleLeaderboard(selected);
-        }}
+        onToggleLeaderboard={() => selected && toggleLeaderboard(selected)}
       />
 
       <ConfirmSheet

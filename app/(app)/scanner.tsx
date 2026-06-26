@@ -4,12 +4,14 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { sessionService } from "@/src/session/session.services";
 
-type DeviceQrStrict = {
+// Updated Type: deviceSecret and boardConf are now optional 
+// since the new backend only requires deviceId
+type DeviceQr = {
   type: "device";
   deviceId: string;
-  deviceSecret: string;
-  boardConf: "20" | "10";
   v: 1;
+  deviceSecret?: string;
+  boardConf?: "20" | "10";
 };
 
 function safeJsonParse(input: string): unknown | null {
@@ -24,7 +26,7 @@ function isNonEmptyString(x: unknown): x is string {
   return typeof x === "string" && x.trim().length > 0;
 }
 
-function parseStrictDeviceQr(raw: string): { ok: true; value: DeviceQrStrict } | { ok: false; reason: string } {
+function parseDeviceQr(raw: string): { ok: true; value: DeviceQr } | { ok: false; reason: string } {
   const s = String(raw ?? "").trim();
   if (!s) return { ok: false, reason: "Wrong QR code." };
 
@@ -38,17 +40,23 @@ function parseStrictDeviceQr(raw: string): { ok: true; value: DeviceQrStrict } |
   if (obj.type !== "device") return { ok: false, reason: "Wrong QR code." };
   if (obj.v !== 1) return { ok: false, reason: "Unsupported QR version." };
   
+  // We now only strictly validate the deviceId presence
   if (!isNonEmptyString(obj.deviceId)) return { ok: false, reason: "Invalid device QR." };
-  if (!isNonEmptyString(obj.deviceSecret)) return { ok: false, reason: "Invalid device QR." };
-  if (obj.boardConf !== "20" && obj.boardConf !== "10") return { ok: false, reason: "Wrong QR code." };
   
   const deviceId = obj.deviceId.trim();
-  const deviceSecret = obj.deviceSecret.trim();
-  const boardConf = obj.boardConf;
   
-  if (deviceId.length < 3 || deviceSecret.length < 3) return { ok: false, reason: "Invalid device QR." };
+  if (deviceId.length < 3) return { ok: false, reason: "Invalid device QR." };
   
-  return { ok: true, value: { type: "device", deviceId, deviceSecret, boardConf, v: 1 } };
+  return { 
+    ok: true, 
+    value: { 
+      type: "device", 
+      deviceId, 
+      v: 1,
+      deviceSecret: isNonEmptyString(obj.deviceSecret) ? obj.deviceSecret : undefined,
+      boardConf: (obj.boardConf === "20" || obj.boardConf === "10") ? obj.boardConf : undefined
+    } 
+  };
 }
 
 function extractApiErrorMessage(err: any) {
@@ -99,7 +107,7 @@ export default function Scanner() {
 
     scanLockRef.current = true;
 
-    const parsed = parseStrictDeviceQr(String(data ?? ""));
+    const parsed = parseDeviceQr(String(data ?? ""));
     if (!parsed.ok) {
       showErrorPopup(parsed.reason, "Wrong QR");
       return;
@@ -107,20 +115,13 @@ export default function Scanner() {
 
     setBusy(true); // Show "Connecting..." overlay
     try {
+      // UPDATED: Only sending the deviceId as expected by the new backend
       await sessionService.start({
         deviceId: parsed.value.deviceId,
-        deviceSecret: parsed.value.deviceSecret,
-        boardConf: parsed.value.boardConf
       });
 
-      // router.replace({
-      //   pathname: "/(app)/device",
-      //   params: {
-      //     deviceId: parsed.value.deviceId,
-      //     deviceSecret: parsed.value.deviceSecret,
-      //   },
-      // });
-
+      // The new backend handles the session creation and MQTT verification.
+      // Once it returns success (or "already connected"), we safely route back.
       router.back();
     } catch (err: any) {
       const msg = extractApiErrorMessage(err);
@@ -316,7 +317,6 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: "#EAF0FF", fontWeight: "900", letterSpacing: 1 },
 
-  // NEW: Loading Overlay
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.65)",
@@ -341,7 +341,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  // Modal popup
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.72)",
